@@ -7,6 +7,7 @@
 body {
   height: 100vh;
   font-family: sans-serif;
+  font-size: 16px;
 }
 
 .content {
@@ -41,6 +42,10 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.code {
+  font-family: Consolas, Menlo, monospace;
 }
 
 .table-container {
@@ -80,8 +85,6 @@ body {
   box-shadow: -1px 0 #cee0f2;
   border-top: 1px solid transparent;
   border-bottom: 1px solid #cee0f2;
-  font-family: Consolas, monospace;
-  font-size: 16px;
   text-decoration: none;
   cursor: pointer;
   white-space: nowrap;
@@ -109,7 +112,7 @@ body {
 }
 
 .info-panel {
-  height: 300px;
+  height: 320px;
   padding: 8px;
   overflow-y: scroll;
   color: black;

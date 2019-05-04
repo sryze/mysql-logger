@@ -82,7 +82,7 @@ function appendQueryRow(table, query) {
   appendCell(row, query.database);
   appendCell(row, query.user);
   appendCell(row, query.query).className = 'query-cell';
-  appendCell(row, query.time);
+  appendCell(row, query.startTimeString);
   return row;
 }
 
@@ -91,11 +91,11 @@ function updateInfoPanelForQuery(query) {
 }
 
 function createHighlightedQuery(queryText) {
-  return queryText;
+  return '<span class="code">' + queryText + '</span>';
 }
 
 function createQueryInfo(query) {
-  return '<b>Query #' + query.index + ':</b><br>'
+  var content = '<b>Query #' + query.index + ':</b><br>'
     + createHighlightedQuery(query.query)
     + '<br><br><b>Query ID:</b><br>'
     + query.queryId
@@ -104,7 +104,15 @@ function createQueryInfo(query) {
     + '<br><br><b>User:</b><br>'
     + query.user
     + '<br><br><b>Started:</b><br>'
-    + query.time;
+    + query.startTimeString;
+  if (query.executionTime != null) {
+    if (query.executionTime == 0) {
+      content += '<br><br><b>Time:</b><br>&lt; 1 second';
+    } else {
+      content += '<br><br><b>Time:</b><br>' + query.executionTime + ' seconds';
+    }
+  }
+  return content;
 }
 
 function onQueryStart(event) {
@@ -116,14 +124,15 @@ function onQueryStart(event) {
 
   var scrollShouldFollow = tableContainer.scrollTop
       >= tableContainer.scrollHeight - tableContainer.clientHeight - 30;
-
   var query = {
     index: queries.length + 1,
     database: event.database,
     user: event.user,
     query: event.query,
     queryId: event.query_id,
-    time: event.time ? formatDateTime(new Date(event.time * 1000)) : ''
+    startTime: event.time,
+    startTimeString:
+      event.time ? formatDateTime(new Date(event.time * 1000)) : ''
   };
   queries.push(query);
 
@@ -151,10 +160,13 @@ function onQueryEnd(event) {
   if (event.query_id == 0) {
     return;
   }
+
   var success = !event.error_code;
   for (var i = 0; i < queries.length; i++) {
-    if (queries[i].queryId == event.query_id) {
+    var query = queries[i];
+    if (query.queryId == event.query_id) {
       addClass(table.rows[i + 1], success ? 'success' : 'error');
+      query.executionTime = event.time - query.startTime;
       break;
     }
   }
