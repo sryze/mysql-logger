@@ -331,7 +331,7 @@ static void send_event(const struct mysql_event_general *event_general)
       json_encode(&message,
         "\"error_code\": %i,", event_general->general_error_code);
       json_encode(&message,
-        "\"error_message\": %s,", event_general->general_command);
+        "\"error_message\": %s", event_general->general_command);
       break;
     case MYSQL_AUDIT_GENERAL_RESULT:
       json_encode(&message,
@@ -339,7 +339,7 @@ static void send_event(const struct mysql_event_general *event_general)
       json_encode(&message,
         "\"time\": %L,", event_general->general_time);
       json_encode(&message,
-        "\"rows\": %L,", event_general->general_rows);
+        "\"rows\": %L", event_general->general_rows);
       break;
   }
 
