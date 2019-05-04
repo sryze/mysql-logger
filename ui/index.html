@@ -1,0 +1,50 @@
+﻿<!DOCTYPE html>
+<html>
+
+<head lang="en">
+  <title>MySQL Logger</title>
+
+  <meta charset="utf-8">
+  <meta http-equiv="content-type" content="text/html">
+
+  <style>
+    {{{{index.css}}}}
+  </style>
+</head>
+
+<body>
+  <main class="content">
+    <h1 class="title">Latest queries</h1>
+
+    <div id="empty-message" class="empty-message">
+      No queries recorded yet.
+      <br><br>
+      If you think this is an error please make sure that the plugin is
+      installed correctly and is loaded by your MySQL server (check log files,
+      journalctl, etc).
+    </div>
+
+    <div id="table-container" class="table-container scrollable">
+      <table id="table" class="table hidden">
+        <thead>
+          <tr>
+            <th width="50px"><div class="cell-content">Index</div></th>
+            <th width="70px"><div class="cell-content">Query ID</div></th>
+            <th width="120px"><div class="cell-content">Database</div></th>
+            <th width="200px"><div class="cell-content">User</div></th>
+            <th><div class="cell-content">Query</div></th>
+            <th width="150px"><div class="cell-content">Time</div></th>
+          </tr>
+        </thead>
+      </table>
+    </div>
+
+    <div id="info-panel" class="info-panel hidden"></div>
+  </main>
+
+  <script>
+    {{{{index.js}}}}
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,11 @@
+.DS_Store
+*.iml
+*.log
+*.swp
+.env
+.gdb_history
+.idea
+.vs
+.vscode
+/build
+/data*

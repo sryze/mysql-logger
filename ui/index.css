@@ -1,0 +1,112 @@
+* {
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+body {
+  height: 100vh;
+  font-family: sans-serif;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.title {
+  flex: 0;
+  margin: 15px 10px;
+  color: #0059b3;
+}
+
+.empty-message {
+  flex: 0;
+  color: #404040;
+  background: #f0f0f0;
+  padding: 10px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.fill {
+  width: 100%;
+}
+
+.single-line {
+  font-weight: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.table-container {
+  flex: 1;
+  overflow-y: scroll;
+  border-top: 1px solid #cee0f2;
+}
+
+.table {
+  table-layout: fixed;
+  width: 100%;
+  max-width: 100vw;
+  background: white;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table td,
+.table th {
+  padding: 10px;
+  text-align: left;
+  border: 0;
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  background: white;
+  box-shadow: -1px 0 #cee0f2;
+  border-bottom: 1px solid #cee0f2;
+}
+
+.table td {
+  color: black;
+  background: #F0F7FF;
+  padding: 10px;
+  box-shadow: -1px 0 #cee0f2;
+  border-top: 1px solid transparent;
+  border-bottom: 1px solid #cee0f2;
+  font-family: Consolas, monospace;
+  font-size: 16px;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.table tr.selected td {
+  background: #A2D1F7;
+  box-shadow: -1px 0 #4496D8;
+  border-top: 1px solid #4496D8;
+  border-bottom: 1px solid #4496D8;
+}
+
+.table td > .cell-content,
+.table th > .cell-content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.info-panel {
+  height: 300px;
+  padding: 8px;
+  overflow-y: scroll;
+  color: black;
+  background: #f0f0f0;
+  box-shadow: 0 -1px #d0d0d0;
+}

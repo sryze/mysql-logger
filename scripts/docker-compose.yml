@@ -1,0 +1,14 @@
+version: '3'
+services:
+  mysql:
+    build: .
+    image: mysql_logger
+    container_name: mysql_logger
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=logger
+      - MYSQL_DATABASE=logger
+    volumes:
+      - ${BUILD_DIR}:/plugin
+    restart: always
