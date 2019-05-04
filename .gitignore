@@ -7,5 +7,6 @@
 .idea
 .vs
 .vscode
+CMakeSettings.json
 /build
 /data*
