@@ -15,7 +15,10 @@ add_custom_command(
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/index.html
     ${CMAKE_CURRENT_BINARY_DIR}/ui/index.html
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ui
-  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/ui/index.html
+  DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/index.html
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/index.css
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/index.js
 )
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src)
