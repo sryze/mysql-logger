@@ -95,7 +95,16 @@ function createHighlightedQuery(queryText) {
 }
 
 function createQueryInfo(query) {
-  return '<b>Query:</b><br>' + createHighlightedQuery(query.query) + '<br><br>';
+  return '<b>Query #' + query.index + ':</b><br>'
+    + createHighlightedQuery(query.query)
+    + '<br><br><b>Query ID:</b><br>'
+    + query.queryId
+    + '<br><br><b>Database:</b><br>'
+    + query.database
+    + '<br><br><b>User:</b><br>'
+    + query.user
+    + '<br><br><b>Started:</b><br>'
+    + query.time;
 }
 
 function onQueryStart(event) {
