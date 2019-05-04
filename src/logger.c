@@ -30,6 +30,8 @@
 #include "string_ext.h"
 #include "thread.h"
 #include "ui_index_html.h"
+#include "ui_index_css.h"
+#include "ui_index_js.h"
 #include "ws.h"
 #ifndef _WIN32
   #include <arpa/inet.h>
@@ -43,6 +45,13 @@ struct ws_client {
   bool is_connected;
   socket_t socket;
   struct sockaddr_in address;
+};
+
+struct http_resource {
+  const char *path;
+  const char *content_type;
+  const char *data;
+  size_t size;
 };
 
 #if 0
@@ -59,6 +68,26 @@ static mutex_t log_mutex;
 /* HTTP -> plugin */
 static thread_t http_server_thread;
 static bool listen_http_connections;
+static struct http_resource http_resources[] = {
+  {
+    "/",
+    "text/html",
+    ui_index_html,
+    sizeof(ui_index_html) - 1
+  },
+  {
+    "/index.css",
+    "text/css",
+    ui_index_css,
+    sizeof(ui_index_css) - 1
+  },
+  {
+    "/index.js",
+    "text/javascript",
+    ui_index_js,
+    sizeof(ui_index_js) - 1
+  },
+};
 
 /* WebSocket -> plugin */
 static thread_t ws_server_thread;
@@ -228,6 +257,8 @@ static void process_http_request(socket_t sock, struct sockaddr_in *addr)
   struct http_fragment http_method;
   struct http_fragment request_target;
   int http_version;
+  size_t i;
+  size_t resource_count = sizeof(http_resources) / sizeof(http_resources[0]);
 
   len = http_recv_headers(sock, buf, sizeof(buf));
   if (len <= 0) {
@@ -250,32 +281,39 @@ static void process_http_request(socket_t sock, struct sockaddr_in *addr)
     return;
   }
 
- if (strncmp(request_target.ptr,
-             "/",
-             request_target.length) == 0) {
-    if (strncmp(http_method.ptr, "GET", http_method.length) == 0) {
-      http_send_content(sock,
-                        ui_index_html,
-                        sizeof(ui_index_html) - 1,
-                        "text/html");
-    } else if (strncmp(http_method.ptr, "HEAD", http_method.length) == 0) {
-      http_send_ok(sock);
-    } else {
-      http_send_bad_request_error(sock);
+  for (i = 0; i < resource_count; i++) {
+    struct http_resource *resource = &http_resources[i];
+
+    if (strncmp(request_target.ptr,
+                resource->path,
+                request_target.length) == 0) {
+      if (strncmp(http_method.ptr, "GET", http_method.length) == 0) {
+        http_send_content(sock,
+                          resource->data,
+                          resource->size,
+                          resource->content_type);
+      } else if (strncmp(http_method.ptr, "HEAD", http_method.length) == 0) {
+        http_send_ok(sock);
+      } else {
+        http_send_bad_request_error(sock);
+      }
+      break;
     }
-  } else {
+  }
+
+  if (i == resource_count) {
     http_send_bad_request_error(sock);
   }
 }
 
-static void process_http_connections(void *arg)
+static void process_http_requests(void *arg)
 {
   UNUSED(arg);
 
   start_server(13306, process_http_request);
 }
 
-static void process_ws_connections(void *arg)
+static void process_ws_requests(void *arg)
 {
   UNUSED(arg);
 
@@ -375,7 +413,7 @@ static int logger_plugin_init(void *arg)
   mutex_create(&ws_clients_mutex);
 
   int error = thread_create(&http_server_thread,
-                            process_http_connections,
+                            process_http_requests,
                             NULL);
   if (error != 0) {
     log_printf("Failed to create HTTP server thread: %d\n", error);
@@ -386,7 +424,7 @@ static int logger_plugin_init(void *arg)
   listen_http_connections = true;
 
   error = thread_create(&ws_server_thread,
-                        process_ws_connections,
+                        process_ws_requests,
                         NULL);
   if (error != 0) {
     log_printf("Failed to create WebSocket server thread: %d\n", error);

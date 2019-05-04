@@ -8,28 +8,37 @@ endif()
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/ui)
-add_executable(file-concat src/tools/file_concat.c src/strbuf.c src/string_ext.c)
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/ui/index.html
-  COMMAND $<TARGET_FILE:file-concat>
-    ${CMAKE_CURRENT_SOURCE_DIR}/ui/index.html
-    ${CMAKE_CURRENT_BINARY_DIR}/ui/index.html
-  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ui
-  DEPENDS
-    ${CMAKE_CURRENT_SOURCE_DIR}/ui/index.html
-    ${CMAKE_CURRENT_SOURCE_DIR}/ui/index.css
-    ${CMAKE_CURRENT_SOURCE_DIR}/ui/index.js
+add_executable(file_concat
+  src/tools/file_concat.c
+  src/strbuf.c
+  src/string_ext.c
 )
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src)
 add_executable(cdump src/tools/cdump.c)
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_html.h
-  COMMAND $<TARGET_FILE:cdump>
-    ${CMAKE_CURRENT_BINARY_DIR}/ui/index.html
-    ui_index_html
-    ${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_html.h
-  DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/ui/index.html
+
+function(add_http_resource path header_path var_name)
+  add_custom_command(
+    OUTPUT ${header_path}
+    COMMAND $<TARGET_FILE:cdump> ${path} ${var_name} ${header_path}
+    DEPENDS ${path}
+  )
+endfunction()
+
+add_http_resource(
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/index.html
+  ${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_html.h
+  ui_index_html
+)
+add_http_resource(
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/index.css
+  ${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_css.h
+  ui_index_css
+)
+add_http_resource(
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/index.js
+  ${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_js.h
+  ui_index_js
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES ".*Clang.*")
@@ -81,6 +90,8 @@ add_library(logger SHARED
   src/ws.c
   src/ws.h
   ${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_html.h
+  ${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_css.h
+  ${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_js.h
 )
 set_target_properties(logger PROPERTIES PREFIX "")
 
