@@ -225,6 +225,7 @@ int http_send_ok(socket_t sock)
 {
   return send_string(sock,
                      "HTTP/1.1 200 OK" CRLF
+                     "Content-Length: 0" CRLF
                      "Connection: close" CRLF
                      CRLF);
 }
@@ -233,6 +234,7 @@ int http_send_bad_request_error(socket_t sock)
 {
   return send_string(sock,
                      "HTTP/1.1 400 Bad Request" CRLF
+                     "Content-Length: 0" CRLF
                      "Connection: close" CRLF
                      CRLF);
 }
@@ -241,6 +243,7 @@ int http_send_internal_error(socket_t sock)
 {
   return send_string(sock,
                      "HTTP/1.1 400 Internal Server Error" CRLF
+                     "Content-Length: 0" CRLF
                      "Connection: close" CRLF
                      CRLF);
 }
