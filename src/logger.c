@@ -310,26 +310,26 @@ static void send_event(const struct mysql_event_general *event_general)
       json_encode(&message,
         "\"query\": %s,", event_general->general_query);
       json_encode(&message,
-        "\"time\": %f,", (double)event_general->general_time);
+        "\"time\": %L,", event_general->general_time);
       json_encode(&message,
-        "\"rows\": %f,", (double)event_general->general_rows);
+        "\"rows\": %L,", event_general->general_rows);
 #if MYSQL_AUDIT_INTERFACE_VERSION >= 0x0302
       json_encode(&message,
-        "\"query_id\": %f,", (double)event_general->query_id);
+        "\"query_id\": %L,", event_general->query_id);
       json_encode(&message,
         "\"database\": %s", *(const char * const *)&event_general->database);
 #else
       json_encode(&message,
-        "\"query_id\": %f", (double)ATOMIC_INCREMENT(&query_count));
+        "\"query_id\": %l", ATOMIC_INCREMENT(&query_count));
 #endif
       break;
     case MYSQL_AUDIT_GENERAL_ERROR:
       json_encode(&message,
         "\"type\": %s,", "query_error");
       json_encode(&message,
-        "\"time\": %f,", (double)event_general->general_time);
+        "\"time\": %L,", event_general->general_time);
       json_encode(&message,
-        "\"error_code\": %f,", (double)event_general->general_error_code);
+        "\"error_code\": %i,", event_general->general_error_code);
       json_encode(&message,
         "\"error_message\": %s,", event_general->general_command);
       break;
@@ -337,9 +337,9 @@ static void send_event(const struct mysql_event_general *event_general)
       json_encode(&message,
         "\"type\": %s,", "query_result");
       json_encode(&message,
-        "\"time\": %f,", (double)event_general->general_time);
+        "\"time\": %L,", event_general->general_time);
       json_encode(&message,
-        "\"rows\": %f,", (double)event_general->general_rows);
+        "\"rows\": %L,", event_general->general_rows);
       break;
   }
 

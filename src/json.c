@@ -20,16 +20,25 @@
 #include "json.h"
 #include "string_ext.h"
 
-#define JSON_MAX_DOUBLE_LEN 25
+#define JSON_MAX_DOUBLE_SIZE 25
+#define JSON_MAX_LONGLONG_SIZE 40
 
 int json_encode_bool(struct strbuf *json, bool value)
 {
   return strbuf_append(json, value ? "true" : "false");
 }
 
+int json_encode_integer(struct strbuf *json, long long value)
+{
+  char buf[JSON_MAX_LONGLONG_SIZE];
+
+  snprintf(buf, sizeof(buf), "%lld", value);
+  return strbuf_append(json, buf);
+}
+
 int json_encode_double(struct strbuf *json, double value)
 {
-  char buf[JSON_MAX_DOUBLE_LEN];
+  char buf[JSON_MAX_DOUBLE_SIZE];
 
   snprintf(buf, sizeof(buf), "%g", value);
   return strbuf_append(json, buf);
@@ -78,8 +87,13 @@ int json_encode(struct strbuf *json, const char *format, ...)
             json_encode_double(json, va_arg(args, double));
             break;
           case 'i':
-          case 'd':
-            json_encode_double(json, (double)va_arg(args, int));
+            json_encode_integer(json, va_arg(args, int));
+            break;
+          case 'l':
+            json_encode_integer(json, va_arg(args, long));
+            break;
+          case 'L':
+            json_encode_integer(json, va_arg(args, long long));
             break;
           case 's':
             json_encode_string(json, va_arg(args, char *));
