@@ -148,8 +148,16 @@ function onQueryStart(event) {
 }
 
 function onQueryEnd(event) {
-  var success = !!event.error_code;
-  // TODO
+  if (event.query_id == 0) {
+    return;
+  }
+  var success = !event.error_code;
+  for (var i = 0; i < queries.length; i++) {
+    if (queries[i].queryId == event.query_id) {
+      addClass(table.rows[i + 1], success ? 'success' : 'error');
+      break;
+    }
+  }
 }
 
 window.addEventListener('DOMContentLoaded', function() {
@@ -171,10 +179,6 @@ window.addEventListener('DOMContentLoaded', function() {
     console.log('WebSocket message:', event);
 
     var loggerEvent = JSON.parse(event.data);
-    if (loggerEvent.type != 'query_start') {
-      return;
-    }
-
     switch (loggerEvent.type) {
       case 'query_start':
         onQueryStart(loggerEvent);

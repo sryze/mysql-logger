@@ -75,7 +75,7 @@ static thread_t ws_message_thread;
 #endif
 
 #if MYSQL_AUDIT_INTERFACE_VERSION < 0x0302
-  static long query_count;
+  static long query_id_counter = 1;
 #endif
 
 static void log_printf(const char *format, ...)
@@ -320,12 +320,14 @@ static void send_event(const struct mysql_event_general *event_general)
         "\"database\": %s", *(const char * const *)&event_general->database);
 #else
       json_encode(&message,
-        "\"query_id\": %l", ATOMIC_INCREMENT(&query_count));
+        "\"query_id\": %l", ATOMIC_INCREMENT(&query_id_counter));
 #endif
       break;
     case MYSQL_AUDIT_GENERAL_ERROR:
       json_encode(&message,
         "\"type\": %s,", "query_error");
+      json_encode(&message,
+        "\"query_id\": %L,", event_general->query_id);
       json_encode(&message,
         "\"time\": %L,", event_general->general_time);
       json_encode(&message,
@@ -336,6 +338,8 @@ static void send_event(const struct mysql_event_general *event_general)
     case MYSQL_AUDIT_GENERAL_RESULT:
       json_encode(&message,
         "\"type\": %s,", "query_result");
+      json_encode(&message,
+        "\"query_id\": %L,", event_general->query_id);
       json_encode(&message,
         "\"time\": %L,", event_general->general_time);
       json_encode(&message,
