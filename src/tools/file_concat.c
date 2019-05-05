@@ -42,7 +42,7 @@ static int read_file(const char *path, struct strbuf *buf)
   }
 
   fread(buf->str, 1, size, file);
-  buf->len = size / sizeof(char);
+  buf->length = size / sizeof(char);
   buf->str[size] = '\0';
   return 0;
 }
@@ -108,13 +108,13 @@ int main(int argc, char **argv)
         || (error = strbuf_insertn(&buf,
                                    start - buf.str,
                                    subst_buf.str,
-                                   subst_buf.len)) != 0) {
+                                   subst_buf.length)) != 0) {
       fprintf(stderr, "Error: %s\n", strerror(error));
       break;
     }
   }
 
-  fwrite(buf.str, sizeof(char), buf.len, out_file);
+  fwrite(buf.str, sizeof(char), buf.length, out_file);
   fclose(out_file);
 
   strbuf_free(&buf);

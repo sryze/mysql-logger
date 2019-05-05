@@ -21,9 +21,9 @@
 #include <stddef.h>
 
 struct strbuf {
-  size_t max_count;
-  size_t len;
   char *str;
+  size_t length;
+  size_t max_count;
 };
 
 int strbuf_alloc(struct strbuf *sb, size_t size);

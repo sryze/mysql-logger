@@ -31,14 +31,14 @@ int strbuf_alloc(struct strbuf *sb, size_t count)
   str = malloc(count * sizeof(char));
   if (str == NULL) {
     sb->str = NULL;
-    sb->len = 0;
+    sb->length = 0;
     sb->max_count = 0;
     return ENOMEM;
   }
 
   str[0] = '\0';
   sb->str = str;
-  sb->len = 0;
+  sb->length = 0;
   sb->max_count = count;
   return 0;
 }
@@ -72,18 +72,18 @@ void strbuf_free(struct strbuf *sb)
 {
   free(sb->str);
   sb->max_count = 0;
-  sb->len = 0;
+  sb->length = 0;
   sb->str = NULL;
 }
 
 int strbuf_appendn(struct strbuf *sb, const char *str, size_t len)
 {
-  return strbuf_insertn(sb, sb->len, str, len);
+  return strbuf_insertn(sb, sb->length, str, len);
 }
 
 int strbuf_append(struct strbuf *sb, const char *str)
 {
-  return strbuf_insertn(sb, sb->len, str, strlen(str));
+  return strbuf_insertn(sb, sb->length, str, strlen(str));
 }
 
 int strbuf_insert(struct strbuf *sb, size_t pos, const char *str)
@@ -93,7 +93,7 @@ int strbuf_insert(struct strbuf *sb, size_t pos, const char *str)
 
 int strbuf_insertn(struct strbuf *sb, size_t pos, const char *str, size_t len)
 {
-  size_t new_len = sb->len + len;
+  size_t new_len = sb->length + len;
   int error;
 
   if (new_len + 1 > sb->max_count) {
@@ -103,31 +103,31 @@ int strbuf_insertn(struct strbuf *sb, size_t pos, const char *str, size_t len)
     }
   }
 
-  if (pos > sb->len) {
-    pos = sb->len;
+  if (pos > sb->length) {
+    pos = sb->length;
   }
 
   memcpy(sb->str + pos + len,
          sb->str + pos,
-         (sb->len - pos) * sizeof(char));
+         (sb->length - pos) * sizeof(char));
   memcpy(sb->str + pos,
          str,
          len * sizeof(char));
-  sb->len = new_len;
+  sb->length = new_len;
   sb->str[new_len] = '\0';
   return 0;
 }
 
 int strbuf_delete(struct strbuf *sb, size_t start, size_t count)
 {
-  if (start >= sb->len || start + count > sb->len) {
+  if (start >= sb->length || start + count > sb->length) {
     return ERANGE;
   }
 
   memmove(sb->str + start,
           sb->str + start + count,
-          sb->len - start - count);
-  sb->len = sb->len - count;
-  sb->str[sb->len] = '\0';
+          sb->length - start - count);
+  sb->length = sb->length - count;
+  sb->str[sb->length] = '\0';
   return 0;
 }
