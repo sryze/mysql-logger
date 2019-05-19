@@ -190,14 +190,14 @@ window.addEventListener('DOMContentLoaded', function() {
   socket.addEventListener('message', function(event) {
     console.log('WebSocket message:', event);
 
-    var loggerEvent = JSON.parse(event.data);
-    switch (loggerEvent.type) {
+    var eventData = JSON.parse(event.data);
+    switch (eventData.type) {
       case 'query_start':
-        onQueryStart(loggerEvent);
+        onQueryStart(eventData);
         break;
       case 'query_error':
       case 'query_result':
-        onQueryEnd(loggerEvent);
+        onQueryEnd(eventData);
         break;
     }
   });

@@ -49,8 +49,14 @@ int json_encode_double(struct strbuf *json, double value)
  */
 int json_encode_string(struct strbuf *json, const char *str)
 {
-  size_t len = strlen(str);
+  size_t len;
 
+  if (str == NULL) {
+    strbuf_append(json, "null");
+    return 0;
+  }
+
+  len = strlen(str);
   strbuf_append(json, "\""); /* opening quote */
 
   for (int i = 0; i < len; i++) {
