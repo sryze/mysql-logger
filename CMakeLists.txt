@@ -52,7 +52,7 @@ if(MSVC)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCC OR COMPILER_IS_CLANG)
-  add_definitions(-D_FORTIFY_SOURCE=1)
+  add_definitions("-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1")
 endif()
 
 find_path(MYSQL_INCLUDE_DIR mysql/plugin.h)
