@@ -6,6 +6,8 @@ services:
     container_name: mysql_logger
     ports:
       - "3306:3306"
+      - "13306:13306"
+      - "13307:13307"
     environment:
       - MYSQL_ROOT_PASSWORD=logger
       - MYSQL_DATABASE=logger
