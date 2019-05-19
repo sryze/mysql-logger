@@ -4,6 +4,8 @@ services:
     build: .
     image: mysql_logger
     container_name: mysql_logger
+    cap_add:
+      - SYS_PTRACE
     ports:
       - "3306:3306"
       - "13306:13306"
