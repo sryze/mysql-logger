@@ -528,6 +528,6 @@ mysql_declare_plugin(logger) {
   NULL,                       /* status variables                */
   NULL,                       /* system variables                */
   NULL,
-  MariaDB_PLUGIN_MATURITY_EXPERIMENTAL
+  MariaDB_PLUGIN_MATURITY_STABLE
 }
 mysql_declare_plugin_end;
