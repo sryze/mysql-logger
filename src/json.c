@@ -81,7 +81,7 @@ int json_encode(struct strbuf *json, const char *format, ...)
       if (format[i] == '%' && i + 1 < len) {
         switch (format[++i]) {
           case 'b':
-            json_encode_bool(json, va_arg(args, bool));
+            json_encode_bool(json, va_arg(args, int));
             break;
           case 'f':
             json_encode_double(json, va_arg(args, double));
