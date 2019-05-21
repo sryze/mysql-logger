@@ -7,7 +7,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "install: Copying files and restarting MySQL server"
-service mysql stop \
+service mysql stop && \
   cp -v logger.so $plugin_dir/ && \
   chmod ag+r /usr/lib/mysql/plugin/logger.so && \
   service mysql start
