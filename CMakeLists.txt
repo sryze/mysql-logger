@@ -13,14 +13,14 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # the header files needed for plugin development. Therefore we download them
 # manually here. This also makes it easier to build the code on other platforms.
 #
-# Download source code for MariaDB 10.0.10 (first stable release in the 10.0
+# Download source code for MariaDB 10.1.8 (first stable release in the 10.1
 # branch) and unpack the include directory to CMAKE_CURRENT_BINARY_DIR/include.
 #
 set(mysql_src_url
-    "https://downloads.mariadb.org/f/mariadb-10.0.10/kvm-tarbake-jaunty-x86/mariadb-10.0.10.tar.gz/from/http%3A//ftp.hosteurope.de/mirror/archive.mariadb.org/?serve")
-set(mysql_src_checksum "14ce22b8197d4eae88d237776d47220f")
-set(mysql_src_archive "${CMAKE_CURRENT_BINARY_DIR}/mariadb-10.0.10.tar.gz")
-set(mysql_include_dir mariadb-10.0.10/include)
+    "https://github.com/MariaDB/server/archive/mariadb-10.1.8.tar.gz")
+set(mysql_src_checksum "ebaf77d8acee9335b920dbca72d19e17")
+set(mysql_src_archive "${CMAKE_CURRENT_BINARY_DIR}/mariadb-10.1.8.tar.gz")
+set(mysql_include_dir server-mariadb-10.1.8/include)
 if(NOT MYSQL_INCLUDE_DIR)
   if(NOT EXISTS "${mysql_src_archive}")
     message("Downloading MySQL headers")
