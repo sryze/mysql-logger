@@ -106,11 +106,7 @@ function createQueryInfo(query) {
     + '<br><br><b>Started:</b><br>'
     + query.startTimeString;
   if (query.executionTime != null) {
-    if (query.executionTime == 0) {
-      content += '<br><br><b>Time:</b><br>&lt; 1 second';
-    } else {
-      content += '<br><br><b>Time:</b><br>' + query.executionTime + ' seconds';
-    }
+    content += '<br><br><b>Time:</b><br>' + query.executionTime / 1000.0 + ' sec';
   }
   return content;
 }
@@ -132,7 +128,7 @@ function onQueryStart(event) {
     queryId: event.query_id,
     startTime: event.time,
     startTimeString:
-      event.time ? formatDateTime(new Date(event.time * 1000)) : ''
+      event.time ? formatDateTime(new Date(event.time)) : ''
   };
   queries.push(query);
 

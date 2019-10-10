@@ -28,6 +28,7 @@
 #include "socket_ext.h"
 #include "strbuf.h"
 #include "string_ext.h"
+#include "time.h"
 #include "thread.h"
 #include "ui_index_html.h"
 #include "ui_index_css.h"
@@ -348,7 +349,7 @@ static void send_event(const struct mysql_event_general *event_general)
       json_encode(&message,
         "\"query\": %s,", event_general->general_query);
       json_encode(&message,
-        "\"time\": %L,", event_general->general_time);
+        "\"time\": %L,", time_ms());
       json_encode(&message,
         "\"rows\": %L,", event_general->general_rows);
 #if MYSQL_AUDIT_INTERFACE_VERSION >= 0x0302
@@ -367,7 +368,7 @@ static void send_event(const struct mysql_event_general *event_general)
       json_encode(&message,
         "\"query_id\": %L,", event_general->query_id);
       json_encode(&message,
-        "\"time\": %L,", event_general->general_time);
+        "\"time\": %L,", time_ms());
       json_encode(&message,
         "\"error_code\": %i,", event_general->general_error_code);
       json_encode(&message,
@@ -379,7 +380,7 @@ static void send_event(const struct mysql_event_general *event_general)
       json_encode(&message,
         "\"query_id\": %L,", event_general->query_id);
       json_encode(&message,
-        "\"time\": %L,", event_general->general_time);
+        "\"time\": %L,", time_ms());
       json_encode(&message,
         "\"rows\": %L", event_general->general_rows);
       break;

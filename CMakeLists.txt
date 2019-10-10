@@ -121,6 +121,8 @@ add_library(logger SHARED
   src/strbuf.h
   src/string_ext.c
   src/string_ext.h
+  src/time.c
+  src/time.h
   src/thread.c
   src/thread.h
   src/ws.c
