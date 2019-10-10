@@ -28,11 +28,11 @@ function toggleClass(element, className) {
 }
 
 function getQueryStringParams() {
-  if (!window.location.search) {
+  if (!window.location.hash || window.location.hash.indexOf('#?') != 0) {
     return {};
   }
   var params = {};
-  var queryString = window.location.search.substring(1);
+  var queryString = window.location.hash.substring(2);
   var queryEntries = queryString.split('&');
   for (var i = 0; i < queryEntries.length; i++) {
     var param = queryEntries[i];
@@ -86,6 +86,10 @@ function appendQueryRow(table, query) {
   return row;
 }
 
+function deleteQueryRow(table, index) {
+  table.deleteRow(index);
+}
+
 function updateInfoPanelForQuery(query) {
   infoPanel.innerHTML = createQueryInfo(query);
 }
@@ -111,9 +115,17 @@ function createQueryInfo(query) {
   return content;
 }
 
-function onQueryStart(event) {
+function onQueryStart(event, options) {
+  options = options || {};
+
   if (queries.length == 0) {
     addClass(emptyMessage, 'hidden');
+  }
+
+  var maxQueryCount = options.maxQueryCount || Infinity;
+  if (queries.length >= maxQueryCount) {
+    queries.splice(1, 1);
+    deleteQueryRow(table, 1);
   }
 
   removeClass(table, 'hidden');
@@ -189,7 +201,9 @@ window.addEventListener('DOMContentLoaded', function() {
     var eventData = JSON.parse(event.data);
     switch (eventData.type) {
       case 'query_start':
-        onQueryStart(eventData);
+        onQueryStart(eventData, {
+          maxQueryCount: params.logSize || 100
+        });
         break;
       case 'query_error':
       case 'query_result':
