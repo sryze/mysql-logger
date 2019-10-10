@@ -175,6 +175,7 @@ function onQueryEnd(event) {
     if (query.queryId == event.query_id) {
       addClass(table.rows[i + 1], success ? 'success' : 'error');
       query.executionTime = event.time - query.startTime;
+      updateInfoPanelForQuery(query);
       break;
     }
   }
