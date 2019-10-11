@@ -25,7 +25,8 @@
 static int read_file(const char *path, struct strbuf *buf)
 {
   FILE *file;
-  long size;
+  size_t size;
+  size_t read_size;
 
   file = fopen(path, "r");
   if (file == NULL) {
@@ -41,9 +42,9 @@ static int read_file(const char *path, struct strbuf *buf)
     return ENOMEM;
   }
 
-  fread(buf->str, 1, size, file);
-  buf->length = size / sizeof(char);
-  buf->str[size] = '\0';
+  read_size = fread(buf->str, 1, size, file);
+  buf->length = read_size / sizeof(char);
+  buf->str[read_size] = '\0';
   return 0;
 }
 
