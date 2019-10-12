@@ -184,7 +184,8 @@ function onQueryEnd(event) {
 window.addEventListener('DOMContentLoaded', function() {
   var params = getQueryStringParams();
   var host = params.host || window.location.hostname || 'localhost';
-  var port = params.port || +window.location.port + 1;
+  var uiPort = window.location.port ? +window.location.port : 13306;
+  var port = params.port || uiPort + 1;
   var url = 'ws://' + host + ':' + port;
   var socket = new WebSocket(url);
 
