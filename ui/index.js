@@ -77,9 +77,8 @@ function appendCell(row, text) {
 
 function appendQueryRow(table, query) {
   var row = table.insertRow();
-  appendCell(row, query.index);
   appendCell(row, query.queryId);
-  appendCell(row, query.database);
+  appendCell(row, query.database != null ? query.database : '');
   appendCell(row, query.user);
   appendCell(row, query.query).className = 'query-cell';
   appendCell(row, query.startTimeString);
@@ -99,20 +98,31 @@ function createHighlightedQuery(queryText) {
 }
 
 function createQueryInfo(query) {
-  var content = '<b>Query #' + query.index + ':</b><br>'
+  return '<b>Status:</b><br>'
+    + query.status
+    + '<br><br><b>Query:</b><br>'
     + createHighlightedQuery(query.query)
     + '<br><br><b>Query ID:</b><br>'
     + query.queryId
-    + '<br><br><b>Database:</b><br>'
-    + query.database
+    + (
+      query.database != null
+        ? '<br><br><b>Database:</b><br>' + query.database
+        : ''
+    )
     + '<br><br><b>User:</b><br>'
     + query.user
+    + (
+      query.errorMesasge != null
+        ? '<br><br><b>Error Message:</b><br>' + query.errorMesasge
+        : ''
+    )
     + '<br><br><b>Started:</b><br>'
-    + query.startTimeString;
-  if (query.executionTime != null) {
-    content += '<br><br><b>Time:</b><br>' + query.executionTime / 1000.0 + ' sec';
-  }
-  return content;
+    + query.startTimeString
+    + (
+      query.executionTime != null
+        ? '<br><br><b>Time:</b><br>' + query.executionTime / 1000.0 + ' sec'
+        : ''
+    );
 }
 
 function onQueryStart(event, options) {
@@ -133,11 +143,11 @@ function onQueryStart(event, options) {
   var scrollShouldFollow = tableContainer.scrollTop
       >= tableContainer.scrollHeight - tableContainer.clientHeight - 30;
   var query = {
-    index: queries.length + 1,
     database: event.database,
     user: event.user,
     query: event.query,
     queryId: event.query_id,
+    status: 'Executing',
     startTime: event.time,
     startTimeString:
       event.time ? formatDateTime(new Date(event.time)) : ''
@@ -146,7 +156,8 @@ function onQueryStart(event, options) {
 
   var row = appendQueryRow(table, query);
   row.addEventListener('click', function() {
-    if (hasClass(row, 'selected')) {
+    var isSelected = hasClass(row, 'selected');
+    if (isSelected) {
       removeClass(row, 'selected');
       addClass(infoPanel, 'hidden');
     } else {
@@ -157,6 +168,7 @@ function onQueryStart(event, options) {
       removeClass(infoPanel, 'hidden');
       updateInfoPanelForQuery(query);
     }
+    query.isSelected = !isSelected;
   });
 
   if (scrollShouldFollow) {
@@ -173,9 +185,13 @@ function onQueryEnd(event) {
   for (var i = 0; i < queries.length; i++) {
     var query = queries[i];
     if (query.queryId == event.query_id) {
-      addClass(table.rows[i + 1], success ? 'success' : 'error');
       query.executionTime = event.time - query.startTime;
-      updateInfoPanelForQuery(query);
+      query.errorMesasge = event.error_message;
+      query.status = success ? 'Success' : 'Error';
+      addClass(table.rows[i + 1], success ? 'success' : 'error');
+      if (query.isSelected) {
+        updateInfoPanelForQuery(query);
+      }
       break;
     }
   }
