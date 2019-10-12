@@ -15,6 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <assert.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -67,6 +68,7 @@ static bool is_plugin_ready;
 static mutex_t log_mutex;
 
 /* HTTP -> plugin */
+socket_t http_server_socket = -1;
 static thread_t http_server_thread;
 static bool listen_http_connections;
 static struct http_resource http_resources[] = {
@@ -91,6 +93,7 @@ static struct http_resource http_resources[] = {
 };
 
 /* WebSocket -> plugin */
+static socket_t ws_server_socket = -1;
 static thread_t ws_server_thread;
 static bool listen_ws_connections;
 static struct ws_client ws_clients[MAX_WS_CLIENTS];
@@ -124,6 +127,7 @@ static void log_printf(const char *format, ...)
 }
 
 static void start_server(unsigned short port,
+                         socket_t *listen_sock,
                          void (*handler)(socket_t, struct sockaddr_in *))
 {
   socket_t server_sock;
@@ -131,6 +135,7 @@ static void start_server(unsigned short port,
   struct sockaddr_in server_addr;
   struct sockaddr_in client_addr;
   socklen_t client_addr_len = sizeof(client_addr);
+  int opt_reuseaddr;
 
   server_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (server_sock < 0) {
@@ -138,12 +143,26 @@ static void start_server(unsigned short port,
     return;
   }
 
+  /*
+   * Allow reuse of this socket address (port) - this makes restarts faster.
+   *
+   * Sockets are usually waited on for some time by the system after they are
+   * closed (netstat shows them in a TIME_WAIT state).
+   */
+  opt_reuseaddr = 1;
+  setsockopt(server_sock,
+             SOL_SOCKET,
+             SO_REUSEADDR,
+             &opt_reuseaddr,
+             sizeof(opt_reuseaddr));
+
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
   server_addr.sin_port = htons(port);
   if (bind(server_sock,
            (struct sockaddr *)&server_addr,
            sizeof(server_addr)) != 0) {
+    close_socket(server_sock);
     log_printf("ERROR: Could not bind to port %u: %d\n",
                port,
                last_socket_error());
@@ -151,11 +170,15 @@ static void start_server(unsigned short port,
   }
 
   if (listen(server_sock, 1) != 0) {
+    close_socket(server_sock);
     log_printf(
       "ERROR: Could not start listening for connections: %d\n",
       last_socket_error());
     return;
   }
+
+  assert(listen_sock != NULL);
+  *listen_sock = server_sock;
 
   while (listen_ws_connections) {
     client_sock = accept(server_sock,
@@ -311,14 +334,14 @@ static void process_http_requests(void *arg)
 {
   UNUSED(arg);
 
-  start_server(13306, process_http_request);
+  start_server(13306, &http_server_socket, process_http_request);
 }
 
 static void process_ws_requests(void *arg)
 {
   UNUSED(arg);
 
-  start_server(13307, process_ws_request);
+  start_server(13307, &ws_server_socket, process_ws_request);
 }
 
 #if 0
@@ -402,6 +425,17 @@ static void send_event(const struct mysql_event_general *event_general)
   strbuf_free(&message);
 }
 
+static int close_socket_nicely(socket_t sock)
+{
+  int error;
+
+  error = shutdown(sock, SHUT_RDWR);
+  if (error == 0) {
+    return close_socket(sock);
+  }
+  return error;
+}
+
 static int logger_plugin_init(void *arg)
 {
   UNUSED(arg);
@@ -447,7 +481,7 @@ static int logger_plugin_init(void *arg)
   thread_set_name(ws_message_thread, "logger_ws_message_thread");
 #endif
 
-  log_printf("Logger plugin initialized\n");
+  log_printf("Logger plugin initialized successfully\n");
   is_plugin_ready = true;
 
   return 0;
@@ -457,6 +491,7 @@ static int logger_plugin_deinit(void *arg)
 {
   UNUSED(arg);
 
+  log_printf("Logger plugin is being deinitialized...\n");
   is_plugin_ready = false;
 
 #if 0
@@ -465,16 +500,22 @@ static int logger_plugin_deinit(void *arg)
 
   listen_http_connections = false;
   thread_stop(http_server_thread);
+  if (http_server_socket != -1) {
+    close_socket_nicely(http_server_socket);
+  }
 
   listen_ws_connections = false;
   thread_stop(ws_server_thread);
+  if (ws_server_socket != -1) {
+    close_socket_nicely(ws_server_socket);
+  }
 
   mutex_lock(&ws_clients_mutex);
 
   for (int i = 0; i < MAX_WS_CLIENTS; i++) {
     struct ws_client *client = &ws_clients[i];
     if (client->is_connected) {
-      close_socket(client->socket);
+      close_socket_nicely(client->socket);
       client->socket = -1;
       client->is_connected = false;
     }
