@@ -153,7 +153,7 @@ static void start_server(unsigned short port,
   setsockopt(server_sock,
              SOL_SOCKET,
              SO_REUSEADDR,
-             &opt_reuseaddr,
+             (const void *)&opt_reuseaddr,
              sizeof(opt_reuseaddr));
 
   server_addr.sin_family = AF_INET;
