@@ -20,4 +20,9 @@
  * IN THE SOFTWARE.
  */
 
+#ifndef TIME_H
+#define TIME_H
+
 long long time_ms(void);
+
+#endif /* TIME_H */

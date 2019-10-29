@@ -20,8 +20,8 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef THREADING_H
-#define THREADING_H
+#ifndef THREAD_H
+#define THREAD_H
 
 #ifdef _WIN32
   #include <windows.h>
@@ -50,4 +50,4 @@ int mutex_lock(mutex_t *mutex);
 int mutex_unlock(mutex_t *mutex);
 int mutex_destroy(mutex_t *mutex);
 
-#endif /* THREADING_H */
+#endif /* THREAD_H */

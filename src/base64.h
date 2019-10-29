@@ -20,9 +20,14 @@
  * IN THE SOFTWARE.
  */
 
+#ifndef BASE64_H
+#define BASE64_H
+
 #include <stddef.h>
 
 size_t base64_encode(const void *data,
                      size_t len,
                      char *buf,
                      size_t buf_size);
+
+#endif /* BASE64_H */
