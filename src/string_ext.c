@@ -54,7 +54,7 @@ char *strndup(const char *str, size_t len)
 
 const char *strnstr(const char *str, const char *substr, size_t len)
 {
-  int i;
+  size_t i;
   size_t sub_len = strlen(substr);
 
   if (len < sub_len) {

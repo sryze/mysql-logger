@@ -215,7 +215,7 @@ static ws_uint8_t *ws_alloc_frame(ws_uint16_t flags,
                                   ws_uint8_t opcode,
                                   ws_uint32_t masking_key,
                                   const char *payload,
-                                  ws_uint64_t payload_len,
+                                  size_t payload_len,
                                   size_t *size)
 {
   ws_uint8_t payload_len_high;

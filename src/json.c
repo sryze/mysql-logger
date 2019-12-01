@@ -54,6 +54,7 @@ int json_encode_double(struct strbuf *json, double value)
  */
 int json_encode_string(struct strbuf *json, const char *str)
 {
+  size_t i;
   size_t len;
 
   if (str == NULL) {
@@ -64,7 +65,7 @@ int json_encode_string(struct strbuf *json, const char *str)
   len = strlen(str);
   strbuf_append(json, "\""); /* opening quote */
 
-  for (int i = 0; i < len; i++) {
+  for (i = 0; i < len; i++) {
     int error;
     if (str[i] == '"') {
       error = strbuf_append(json, "\\\"");
