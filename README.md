@@ -28,4 +28,4 @@ install plugin logger soname 'logger.so'
 License
 -------
 
-See [LICENSE.txt](LICENSE.txt).
+MIT license. See [LICENSE.txt](LICENSE.txt) for details.
