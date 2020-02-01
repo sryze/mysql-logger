@@ -566,7 +566,7 @@ mysql_declare_plugin(logger) {
   MYSQL_AUDIT_PLUGIN,         /* type                            */
   &logger_descriptor,         /* descriptor                      */
   "LOGGER",                   /* name                            */
-  "szx",                      /* author                          */
+  "Sergey Zolotarev",         /* author                          */
   "Nice query logger",        /* description                     */
   PLUGIN_LICENSE_PROPRIETARY,
   logger_plugin_init,         /* init function (when loaded)     */
