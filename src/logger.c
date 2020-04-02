@@ -133,6 +133,7 @@ static void log_printf(const char *format, ...)
 
 static void start_server(unsigned short port,
                          socket_t *listen_sock,
+                         bool *listen_connections,
                          void (*handler)(socket_t, struct sockaddr_in *))
 {
   socket_t server_sock;
@@ -183,9 +184,10 @@ static void start_server(unsigned short port,
   }
 
   assert(listen_sock != NULL);
+  assert(listen_connections != NULL);
   *listen_sock = server_sock;
 
-  while (listen_ws_connections) {
+  while (*listen_connections) {
     client_sock = accept(server_sock,
                          (struct sockaddr *)&client_addr,
                          &client_addr_len);
@@ -339,14 +341,14 @@ static void process_http_requests(void *arg)
 {
   UNUSED(arg);
 
-  start_server(13306, &http_server_socket, process_http_request);
+  start_server(13306, &http_server_socket, &listen_http_connections, process_http_request);
 }
 
 static void process_ws_requests(void *arg)
 {
   UNUSED(arg);
 
-  start_server(13307, &ws_server_socket, process_ws_request);
+  start_server(13307, &ws_server_socket, &listen_ws_connections, process_ws_request);
 }
 
 #if 0
