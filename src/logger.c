@@ -36,6 +36,7 @@
 #include "string_ext.h"
 #include "time.h"
 #include "thread.h"
+#include "ui_favicon_ico.h"
 #include "ui_index_html.h"
 #include "ui_index_css.h"
 #include "ui_index_js.h"
@@ -82,6 +83,12 @@ static struct http_resource http_resources[] = {
     "text/html",
     ui_index_html,
     sizeof(ui_index_html) - 1
+  },
+  {
+    "/favicon.ico",
+    "image/x-icon",
+    ui_favicon_ico,
+    sizeof(ui_favicon_ico) - 1
   },
   {
     "/index.css",

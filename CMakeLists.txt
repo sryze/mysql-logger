@@ -67,6 +67,11 @@ function(add_http_resource path header_path var_name)
 endfunction()
 
 add_http_resource(
+  "${CMAKE_CURRENT_SOURCE_DIR}/ui/favicon.ico"
+  "${CMAKE_CURRENT_BINARY_DIR}/src/ui_favicon_ico.h"
+  ui_favicon_ico
+)
+add_http_resource(
   "${CMAKE_CURRENT_SOURCE_DIR}/ui/index.html"
   "${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_html.h"
   ui_index_html
@@ -127,6 +132,7 @@ add_library(logger SHARED
   src/thread.h
   src/ws.c
   src/ws.h
+  "${CMAKE_CURRENT_BINARY_DIR}/src/ui_favicon_ico.h"
   "${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_html.h"
   "${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_css.h"
   "${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_js.h"
