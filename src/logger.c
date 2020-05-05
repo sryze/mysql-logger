@@ -49,6 +49,12 @@
 #define MAX_HTTP_HEADERS (8 * 1024) /* HTTP RFC recommends at least 8000 */
 #define MAX_WS_CLIENTS 32
 
+#ifdef DEBUG
+  #define LOGGER_PORT 23306
+#else
+  #define LOGGER_PORT 13306
+#endif
+
 struct ws_client {
   bool is_connected;
   socket_t socket;
@@ -348,14 +354,14 @@ static void process_http_requests(void *arg)
 {
   UNUSED(arg);
 
-  start_server(13306, &http_server_socket, &listen_http_connections, process_http_request);
+  start_server(LOGGER_PORT, &http_server_socket, &listen_http_connections, process_http_request);
 }
 
 static void process_ws_requests(void *arg)
 {
   UNUSED(arg);
 
-  start_server(13307, &ws_server_socket, &listen_ws_connections, process_ws_request);
+  start_server(LOGGER_PORT + 1, &ws_server_socket, &listen_ws_connections, process_ws_request);
 }
 
 #if 0

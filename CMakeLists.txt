@@ -48,6 +48,8 @@ else()
   message("Found MySQL headers: ${MYSQL_INCLUDE_DIR}")
 endif()
 
+add_compile_options("$<$<CONFIG:DEBUG>:-DDEBUG>")
+
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/ui")
 add_executable(file_concat
   src/tools/file_concat.c
