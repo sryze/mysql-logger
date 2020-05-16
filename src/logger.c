@@ -354,14 +354,25 @@ static void process_http_requests(void *arg)
 {
   UNUSED(arg);
 
-  start_server(LOGGER_PORT, &http_server_socket, &listen_http_connections, process_http_request);
+  log_printf("Listening for HTTP connections at port %d\n", LOGGER_PORT);
+  start_server(
+    LOGGER_PORT,
+    &http_server_socket,
+    &listen_http_connections,
+    process_http_request);
 }
 
 static void process_ws_requests(void *arg)
 {
   UNUSED(arg);
 
-  start_server(LOGGER_PORT + 1, &ws_server_socket, &listen_ws_connections, process_ws_request);
+  log_printf("Listening for WebSocket connections at port %d\n",
+    LOGGER_PORT + 1);
+  start_server(
+    LOGGER_PORT + 1,
+    &ws_server_socket,
+    &listen_ws_connections,
+    process_ws_request);
 }
 
 #if 0
