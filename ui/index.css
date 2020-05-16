@@ -51,7 +51,6 @@ body {
 .table-container {
   flex: 1;
   overflow-y: scroll;
-  border-top: 1px solid #cee0f2;
 }
 
 .table {
@@ -75,6 +74,7 @@ body {
   top: 0;
   background: white;
   box-shadow: -1px 0 #cee0f2;
+  border-top: 1px solid #cee0f2;
   border-bottom: 1px solid #cee0f2;
 }
 
