@@ -528,10 +528,12 @@ static void process_message(struct ws_message *message)
 
 static void process_pending_messages(void *arg)
 {
+  struct ws_message *message;
+
   UNUSED(arg);
 
   while (messaging_active) {
-    struct ws_message *message;
+    thread_sleep(5);
 
     if (message_queue == NULL) {
       continue;
@@ -550,8 +552,6 @@ static void process_pending_messages(void *arg)
 
     process_message(message);
     free(message);
-
-    thread_sleep(10);
   }
 }
 
