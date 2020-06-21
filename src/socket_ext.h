@@ -33,12 +33,15 @@
   #define SHUT_WR SD_SEND
   #define SHUT_RDWR SD_BOTH
   #define close_socket closesocket
+  #define ioctl_socket ioctlsocket
 #else
   #include <sys/socket.h>
+  #include <sys/ioctl.h>
   #include <netdb.h>
   #include <unistd.h>
   typedef int socket_t;
   #define close_socket close
+  #define ioctl_socket ioctl
   #define INVALID_SOCKET -1
 #endif
 

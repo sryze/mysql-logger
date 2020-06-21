@@ -51,8 +51,8 @@
 #define MAX_WS_CLIENTS 32
 #define MAX_WS_MESSAGE_LEN 4096
 #define MAX_WS_MESSAGES 1024
-#define MESSAGE_QUEUE_TICK 5
 #define MAX_MESSAGE_QUEUE_SIZE 10240
+#define LOOP_SLEEP 5
 
 #ifdef DEBUG
   #define LOGGER_PORT 23306
@@ -174,6 +174,17 @@ static void start_server(unsigned short port,
   setsockopt(
       listen_sock, SOL_SOCKET, SO_REUSEADDR, (void *)&opt, sizeof(opt));
 
+  /*
+   * Switch the listening socket to non-blocking mode. This prevents accept()
+   * and other socket system calls from blocking.
+   */
+  opt = 1;
+  if (ioctl_socket(listen_sock, FIONBIO, &opt) != 0) {
+    log_printf("ERROR: Could not change socket I/O mode: %s\n",
+        socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
+    return;
+  }
+
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
   server_addr.sin_port = htons(port);
@@ -204,9 +215,23 @@ static void start_server(unsigned short port,
                          (struct sockaddr *)&client_addr,
                          &client_addr_len);
     if (client_sock == INVALID_SOCKET) {
+      int error = socket_errno();
+      if (error == EAGAIN || error == EWOULDBLOCK) {
+        thread_sleep(LOOP_SLEEP);
+        continue;
+      }
       log_printf("ERROR: Could not accept connection: %s\n",
           socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
       continue;
+    }
+    /*
+     * Switch to blocking mode (listening socket remains non-blocking).
+     */
+    opt = 0;
+    if (ioctl_socket(client_sock, FIONBIO, &opt) != 0) {
+      log_printf("ERROR: Could not change socket I/O mode: %s\n",
+          socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
+      return;
     }
     handler(client_sock, &client_addr);
   }
@@ -511,7 +536,7 @@ static void process_pending_messages(void *arg)
     process_message(message);
     free(message);
 
-    thread_sleep(MESSAGE_QUEUE_TICK);
+    thread_sleep(LOOP_SLEEP);
   }
 }
 
