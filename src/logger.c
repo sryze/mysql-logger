@@ -52,7 +52,6 @@
 #define MAX_WS_MESSAGE_LEN 4096
 #define MAX_WS_MESSAGES 1024
 #define MAX_MESSAGE_QUEUE_SIZE 10240
-#define LOOP_SLEEP 5
 
 #ifdef DEBUG
   #define LOGGER_PORT 23306
@@ -159,6 +158,8 @@ static void start_server(unsigned short port,
   struct sockaddr_in client_addr;
   socklen_t client_addr_len = sizeof(client_addr);
   int opt;
+  fd_set listen_set, working_set;
+  struct timeval timeout;
 
   listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (listen_sock < 0) {
@@ -210,30 +211,44 @@ static void start_server(unsigned short port,
   assert(flag != NULL);
   *sock = listen_sock;
 
+  FD_ZERO(&listen_set);
+  FD_SET(listen_sock, &listen_set);
+
+  timeout.tv_sec = 0;
+  timeout.tv_usec = 10000;
+
   while (*flag) {
-    client_sock = accept(listen_sock,
-                         (struct sockaddr *)&client_addr,
-                         &client_addr_len);
-    if (client_sock == INVALID_SOCKET) {
-      int error = socket_errno();
-      if (error == EAGAIN || error == EWOULDBLOCK) {
-        thread_sleep(LOOP_SLEEP);
+    int result;
+
+    memcpy(&working_set, &listen_set, sizeof(fd_set));
+
+    result = select((int)listen_sock + 1, &working_set, NULL, NULL, &timeout);
+    if (result < 0) {
+      log_printf("ERROR: Socket monitoring failed: %s\n",
+          socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
+      break;
+    }
+
+    if (FD_ISSET(listen_sock, &working_set)) {
+      client_sock = accept(listen_sock,
+                           (struct sockaddr *)&client_addr,
+                           &client_addr_len);
+      if (client_sock < 0) {
+        log_printf("ERROR: Could not accept connection: %s\n",
+            socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
         continue;
       }
-      log_printf("ERROR: Could not accept connection: %s\n",
-          socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
-      continue;
+      /*
+       * Switch to blocking mode (listening socket remains non-blocking).
+       */
+      opt = 0;
+      if (ioctl_socket(client_sock, FIONBIO, &opt) != 0) {
+        log_printf("ERROR: Could not change socket I/O mode: %s\n",
+            socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
+        return;
+      }
+      handler(client_sock, &client_addr);
     }
-    /*
-     * Switch to blocking mode (listening socket remains non-blocking).
-     */
-    opt = 0;
-    if (ioctl_socket(client_sock, FIONBIO, &opt) != 0) {
-      log_printf("ERROR: Could not change socket I/O mode: %s\n",
-          socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
-      return;
-    }
-    handler(client_sock, &client_addr);
   }
 }
 
@@ -536,7 +551,7 @@ static void process_pending_messages(void *arg)
     process_message(message);
     free(message);
 
-    thread_sleep(LOOP_SLEEP);
+    thread_sleep(10);
   }
 }
 
