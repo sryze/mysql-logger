@@ -28,7 +28,6 @@
 #include <string.h>
 #include <mysql/plugin.h>
 #include <mysql/plugin_audit.h>
-#include "bool.h"
 #include "http.h"
 #include "json.h"
 #include "socket_ext.h"
@@ -36,6 +35,7 @@
 #include "string_ext.h"
 #include "time.h"
 #include "thread.h"
+#include "types.h"
 #include "ui_favicon_ico.h"
 #include "ui_index_html.h"
 #include "ui_index_css.h"
@@ -48,6 +48,10 @@
 #define UNUSED(x) (void)(x)
 #define MAX_HTTP_HEADERS (8 * 1024) /* HTTP RFC recommends at least 8000 */
 #define MAX_WS_CLIENTS 32
+#define MAX_WS_MESSAGE_LEN 4096
+#define MAX_WS_MESSAGES 1024
+#define MESSAGE_QUEUE_TICK 5
+#define MAX_MESSAGE_QUEUE_SIZE 10240
 
 #ifdef DEBUG
   #define LOGGER_PORT 23306
@@ -56,7 +60,8 @@
 #endif
 
 struct ws_client {
-  bool is_connected;
+  mutex_t mutex;
+  bool connected;
   socket_t socket;
   struct sockaddr_in address;
 };
@@ -68,21 +73,18 @@ struct http_resource {
   size_t size;
 };
 
-#if 0
-
 struct ws_message {
-  struct mysql_event_general event;
+  struct strbuf message;
+  struct ws_message *next;
 };
 
-#endif
-
-static bool is_plugin_ready;
+static bool plugin_ready;
 static mutex_t log_mutex;
 
 /* HTTP -> plugin */
-socket_t http_server_socket = -1;
+static volatile bool http_server_active;
+socket_t http_server_socket = INVALID_SOCKET;
 static thread_t http_server_thread;
-static bool listen_http_connections;
 static struct http_resource http_resources[] = {
   {
     "/",
@@ -111,19 +113,19 @@ static struct http_resource http_resources[] = {
 };
 
 /* WebSocket -> plugin */
-static socket_t ws_server_socket = -1;
+static volatile bool ws_server_active;
+static socket_t ws_server_socket = INVALID_SOCKET;
 static thread_t ws_server_thread;
-static bool listen_ws_connections;
 static struct ws_client ws_clients[MAX_WS_CLIENTS];
 static mutex_t ws_clients_mutex;
 
-#if 0
-
 /* plugin -> WebSocket */
-static struct ws_message *ws_message_queue;
-static thread_t ws_message_thread;
-
-#endif
+static volatile bool messaging_active;
+static thread_t message_thread;
+static struct ws_message *message_queue;
+static struct ws_message *message_queue_tail;
+static volatile long pending_message_count;
+static mutex_t message_queue_mutex;
 
 #if MYSQL_AUDIT_INTERFACE_VERSION < 0x0302
   static long query_id_counter = 1;
@@ -145,8 +147,8 @@ static void log_printf(const char *format, ...)
 }
 
 static void start_server(unsigned short port,
-                         socket_t *listen_sock,
-                         bool *listen_connections,
+                         socket_t *sock,
+                         volatile bool *flag,
                          void (*handler)(socket_t, struct sockaddr_in *))
 {
   socket_t server_sock;
@@ -196,11 +198,11 @@ static void start_server(unsigned short port,
     return;
   }
 
-  assert(listen_sock != NULL);
-  assert(listen_connections != NULL);
-  *listen_sock = server_sock;
+  assert(sock != NULL);
+  assert(flag != NULL);
+  *sock = server_sock;
 
-  while (*listen_connections) {
+  while (*flag) {
     client_sock = accept(server_sock,
                          (struct sockaddr *)&client_addr,
                          &client_addr_len);
@@ -258,6 +260,8 @@ static bool perform_ws_handshake(socket_t sock)
 
 static void process_ws_request(socket_t sock, struct sockaddr_in *addr)
 {
+  struct ws_client *client = NULL;
+
   if (!perform_ws_handshake(sock)) {
     close_socket(sock);
     return;
@@ -275,23 +279,37 @@ static void process_ws_request(socket_t sock, struct sockaddr_in *addr)
 
   mutex_lock(&ws_clients_mutex);
   {
-    struct ws_client *client = NULL;
     for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-      if (!ws_clients[i].is_connected) {
+      if (!ws_clients[i].connected) {
         client = &ws_clients[i];
+        client->connected = true;
         client->socket = sock;
         client->address = *addr;
-        client->is_connected = true;
+        mutex_create(&client->mutex);
         break;
       }
     }
-    if (client == NULL) {
-      log_printf("Client limit reached, closing connection\n");
-      ws_send_close(sock, 0, 0);
-      close_socket(sock);
-    }
   }
   mutex_unlock(&ws_clients_mutex);
+
+  if (client == NULL) {
+    log_printf("Client limit reached, closing connection\n");
+    ws_send_close(sock, 0, 0);
+    close_socket(sock);
+  }
+}
+
+static void process_ws_requests(void *arg)
+{
+  UNUSED(arg);
+
+  log_printf("Listening for WebSocket connections on port %d\n",
+      LOGGER_PORT + 1);
+  start_server(
+      LOGGER_PORT + 1,
+      &ws_server_socket,
+      &ws_server_active,
+      process_ws_request);
 }
 
 static void process_http_request(socket_t sock, struct sockaddr_in *addr)
@@ -354,62 +372,53 @@ static void process_http_requests(void *arg)
 {
   UNUSED(arg);
 
-  log_printf("Listening for HTTP connections at port %d\n", LOGGER_PORT);
+  log_printf("Listening for HTTP connections on port %d\n", LOGGER_PORT);
   start_server(
-    LOGGER_PORT,
-    &http_server_socket,
-    &listen_http_connections,
-    process_http_request);
+      LOGGER_PORT,
+      &http_server_socket,
+      &http_server_active,
+      process_http_request);
 }
 
-static void process_ws_requests(void *arg)
+static void send_event_message(const struct mysql_event_general *event_general)
 {
-  UNUSED(arg);
+  struct strbuf buf;
+  bool ignore = false;
 
-  log_printf("Listening for WebSocket connections at port %d\n",
-    LOGGER_PORT + 1);
-  start_server(
-    LOGGER_PORT + 1,
-    &ws_server_socket,
-    &listen_ws_connections,
-    process_ws_request);
-}
+  mutex_lock(&message_queue_mutex);
+  {
+    if (pending_message_count >= MAX_MESSAGE_QUEUE_SIZE) {
+      ignore = true;
+    }
+  }
+  mutex_unlock(&message_queue_mutex);
 
-#if 0
-
-static void process_ws_messages(void *arg)
-{
-  UNUSED(arg);
-}
-
-#endif
-
-static void send_event(const struct mysql_event_general *event_general)
-{
-  struct strbuf message;
-
-  if (strbuf_alloc(&message, 1024) != 0) {
+  if (ignore) {
     return;
   }
 
-  strbuf_append(&message, "{");
+  if (strbuf_alloc(&buf, MAX_WS_MESSAGE_LEN) != 0) {
+    return;
+  }
+
+  strbuf_append(&buf, "{");
 
   switch (event_general->event_subclass) {
     case MYSQL_AUDIT_GENERAL_LOG:
-      json_encode(&message,
+      json_encode(&buf,
         "\"type\": %s,", "query_start");
-      json_encode(&message,
+      json_encode(&buf,
         "\"user\": %s,", event_general->general_user);
-      json_encode(&message,
+      json_encode(&buf,
         "\"query\": %s,", event_general->general_query);
-      json_encode(&message,
+      json_encode(&buf,
         "\"time\": %L,", time_ms());
-      json_encode(&message,
+      json_encode(&buf,
         "\"rows\": %L,", event_general->general_rows);
 #if MYSQL_AUDIT_INTERFACE_VERSION >= 0x0302
-      json_encode(&message,
+      json_encode(&buf,
         "\"query_id\": %L,", event_general->query_id);
-      json_encode(&message,
+      json_encode(&buf,
         "\"database\": %s", *(const char * const *)&event_general->database);
 #else
       json_encode(&message,
@@ -417,103 +426,138 @@ static void send_event(const struct mysql_event_general *event_general)
 #endif
       break;
     case MYSQL_AUDIT_GENERAL_ERROR:
-      json_encode(&message,
+      json_encode(&buf,
         "\"type\": %s,", "query_error");
-      json_encode(&message,
+      json_encode(&buf,
         "\"query_id\": %L,", event_general->query_id);
-      json_encode(&message,
+      json_encode(&buf,
         "\"time\": %L,", time_ms());
-      json_encode(&message,
+      json_encode(&buf,
         "\"error_code\": %i,", event_general->general_error_code);
-      json_encode(&message,
+      json_encode(&buf,
         "\"error_message\": %s", event_general->general_command);
       break;
     case MYSQL_AUDIT_GENERAL_RESULT:
-      json_encode(&message,
+      json_encode(&buf,
         "\"type\": %s,", "query_result");
-      json_encode(&message,
+      json_encode(&buf,
         "\"query_id\": %L,", event_general->query_id);
-      json_encode(&message,
+      json_encode(&buf,
         "\"time\": %L,", time_ms());
-      json_encode(&message,
+      json_encode(&buf,
         "\"rows\": %L", event_general->general_rows);
       break;
   }
 
-  strbuf_append(&message, "}");
+  strbuf_append(&buf, "}");
 
-  mutex_lock(&ws_clients_mutex);
+  mutex_lock(&message_queue_mutex);
   {
-    for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-      struct ws_client *client = &ws_clients[i];
-      if (client->is_connected) {
-        ws_send_text(client->socket, message.str, WS_FLAG_FINAL, 0);
-      }
+    struct ws_message *message = malloc(sizeof(*message));
+    message->message = buf;
+    message->next = NULL;
+    if (message_queue_tail != NULL) {
+      message_queue_tail->next = message;
+    }
+    message_queue_tail = message;
+    if (message_queue == NULL) {
+      message_queue = message;
     }
   }
-  mutex_unlock(&ws_clients_mutex);
+  mutex_unlock(&message_queue_mutex);
 
-  strbuf_free(&message);
+  ATOMIC_INCREMENT(&pending_message_count);
 }
 
-static int close_socket_nicely(socket_t sock)
+static void process_message(struct ws_message *message)
 {
-  int error;
+  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+    struct ws_client *client = &ws_clients[i];
 
-  error = shutdown(sock, SHUT_RDWR);
-  if (error == 0) {
-    return close_socket(sock);
+    mutex_lock(&client->mutex);
+    {
+      if (client->connected) {
+        ws_send_text(client->socket, message->message.str, WS_FLAG_FINAL, 0);
+      }
+    }
+    mutex_unlock(&client->mutex);
   }
-  return error;
+
+  ATOMIC_DECREMENT(&pending_message_count);
+}
+
+static void process_pending_messages(void *arg)
+{
+  UNUSED(arg);
+
+  while (messaging_active) {
+    struct ws_message *message;
+
+    if (message_queue == NULL) {
+      continue;
+    }
+
+    mutex_lock(&message_queue_mutex);
+    {
+      message = message_queue;
+      message_queue = message->next;
+      message->next = NULL;
+      if (message_queue_tail == message) {
+        message_queue_tail = NULL; /* last message */
+      }
+    }
+    mutex_unlock(&message_queue_mutex);
+
+    process_message(message);
+    free(message);
+
+    thread_sleep(MESSAGE_QUEUE_TICK);
+  }
 }
 
 static int logger_plugin_init(void *arg)
 {
+  int error;
+
   UNUSED(arg);
 
-  if (is_plugin_ready) {
+  if (plugin_ready) {
     return 1;
   }
 
   mutex_create(&log_mutex);
   mutex_create(&ws_clients_mutex);
+  mutex_create(&message_queue_mutex);
 
-  int error = thread_create(&http_server_thread,
-                            process_http_requests,
-                            NULL);
+  http_server_active = true;
+  error = thread_create(
+      &http_server_thread, process_http_requests, NULL);
   if (error != 0) {
     log_printf("Failed to create HTTP server thread: %d\n", error);
     return error;
   }
-
   thread_set_name(ws_server_thread, "logger_http_server_thread");
-  listen_http_connections = true;
 
-  error = thread_create(&ws_server_thread,
-                        process_ws_requests,
-                        NULL);
+  ws_server_active = true;
+  error = thread_create(
+      &ws_server_thread, process_ws_requests, NULL);
   if (error != 0) {
     log_printf("Failed to create WebSocket server thread: %d\n", error);
     return error;
   }
-
   thread_set_name(ws_server_thread, "logger_ws_server_thread");
-  listen_ws_connections = true;
 
-#if 0
-  error = thread_create(&ws_message_thread,
-                        process_ws_messages,
-                        NULL);
+  messaging_active = true;
+  error = thread_create(
+      &message_thread, process_pending_messages, NULL);
   if (error != 0) {
-    log_printf("Failed to create WebSocket messaging thread: %d\n", error);
+    log_printf("Failed to create messaging thread: %d\n", error);
     return error;
   }
+  thread_set_name(message_thread, "logger_message_thread");
 
-  thread_set_name(ws_message_thread, "logger_ws_message_thread");
-#endif
-
-  log_printf("Logger plugin initialized successfully\n");
-  is_plugin_ready = true;
+  plugin_ready = true;
+  log_printf("Logger plugin initialized\n");
 
   return 0;
 }
@@ -523,37 +567,57 @@ static int logger_plugin_deinit(void *arg)
   UNUSED(arg);
 
   log_printf("Logger plugin is being deinitialized...\n");
-  is_plugin_ready = false;
+  plugin_ready = false;
 
-#if 0
-  thread_stop(ws_message_thread);
-#endif
-
-  listen_http_connections = false;
-  thread_stop(http_server_thread);
-  if (http_server_socket != -1) {
+  http_server_active = false;
+  thread_join(http_server_thread);
+  if (http_server_socket != INVALID_SOCKET) {
     close_socket_nicely(http_server_socket);
   }
 
-  listen_ws_connections = false;
-  thread_stop(ws_server_thread);
-  if (ws_server_socket != -1) {
+  ws_server_active = false;
+  thread_join(ws_server_thread);
+  if (ws_server_socket != INVALID_SOCKET) {
     close_socket_nicely(ws_server_socket);
   }
 
-  mutex_lock(&ws_clients_mutex);
+  mutex_lock(&message_queue_mutex);
+  {
+    while (message_queue != NULL) {
+      struct ws_message *message = message_queue;
+      message_queue = message->next;
+      free(message);
+    }
+    message_queue_tail = NULL;
+  }
+  mutex_unlock(&message_queue_mutex);
 
-  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-    struct ws_client *client = &ws_clients[i];
-    if (client->is_connected) {
-      close_socket_nicely(client->socket);
-      client->socket = -1;
-      client->is_connected = false;
+  thread_join(message_thread);
+
+  mutex_lock(&ws_clients_mutex);
+  {
+    for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+      struct ws_client *client = &ws_clients[i];
+
+      mutex_lock(&client->mutex);
+      mutex_t mutex = client->mutex;
+      {
+        if (client->connected) {
+          close_socket_nicely(client->socket);
+          client->socket = INVALID_SOCKET;
+          client->connected = false;
+          mutex_destroy(&client->mutex);
+        }
+      }
+      mutex_unlock(&mutex);
+      mutex_destroy(&mutex);
     }
   }
+  mutex_unlock(&ws_clients_mutex);
 
   mutex_destroy(&ws_clients_mutex);
   mutex_destroy(&log_mutex);
+  mutex_destroy(&message_queue_mutex);
 
   return 0;
 }
@@ -562,7 +626,7 @@ static void logger_notify(MYSQL_THD thd,
                           unsigned int event_class,
                           const void *event)
 {
-  if (!is_plugin_ready) {
+  if (!plugin_ready) {
     return;
   }
 
@@ -574,7 +638,7 @@ static void logger_notify(MYSQL_THD thd,
       case MYSQL_AUDIT_GENERAL_LOG:
       case MYSQL_AUDIT_GENERAL_ERROR:
       case MYSQL_AUDIT_GENERAL_RESULT: {
-        send_event(event_general);
+        send_event_message(event_general);
         break;
       }
     }

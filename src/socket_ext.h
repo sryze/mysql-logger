@@ -39,10 +39,13 @@
   #include <unistd.h>
   typedef int socket_t;
   #define close_socket close
+  #define INVALID_SOCKET -1
 #endif
 
 typedef int (*recv_handler_t)(
     const char *buf, int len, int chunk_offset, int chunk_len);
+
+int close_socket_nicely(socket_t sock);
 
 int recv_n(socket_t sock, char *buf, int size, recv_handler_t handler);
 int send_n(socket_t sock, const char *buf, int size);

@@ -22,6 +22,9 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#ifndef _WIN32
+  #include <unistd.h>
+#endif
 #include "thread.h"
 
 #define MAX_THREAD_NAME 256
@@ -120,6 +123,29 @@ int thread_stop(thread_t handle)
   return 0;
 #else
   return pthread_cancel(handle);
+#endif
+}
+
+int thread_join(thread_t handle)
+{
+#ifdef _WIN32
+  DWORD result = WaitForSingleObject(handle, INFINITE);
+  if (result == WAIT_FAILED) {
+    return GetLastError();
+  }
+  return result;
+#else
+  return pthread_join(handle, NULL);
+#endif
+}
+
+int thread_sleep(long ms)
+{
+#ifdef _WIN32
+  Sleep(ms);
+  return 0;
+#else
+  return usleep(ms * 1000);
 #endif
 }
 

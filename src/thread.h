@@ -35,8 +35,14 @@
 
 #if defined _WIN32
   #define ATOMIC_INCREMENT(x) InterlockedIncrement(x)
+  #define ATOMIC_DECREMENT(x) InterlockedDecrement(x)
+  #define ATOMIC_COMPARE_EXCHANGE(dest, oldval, newval) \
+      InterlockedCompareExchange(dest, newval, oldval)
 #elif defined __GNUC__
   #define ATOMIC_INCREMENT(x) __sync_fetch_and_add(x, 1)
+  #define ATOMIC_DECREMENT(x) __sync_fetch_and_sub(x, 1)
+  #define ATOMIC_COMPARE_EXCHANGE(dest, oldval, newval) \
+      __sync_val_compare_and_swap(dest, oldval, newval)
 #endif
 
 int thread_create(thread_t *handle,
@@ -44,6 +50,8 @@ int thread_create(thread_t *handle,
                   void *data);
 int thread_set_name(thread_t handle, const char *name);
 int thread_stop(thread_t handle);
+int thread_join(thread_t handle);
+int thread_sleep(long ms);
 
 int mutex_create(mutex_t *mutex);
 int mutex_lock(mutex_t *mutex);

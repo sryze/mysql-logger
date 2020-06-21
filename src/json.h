@@ -23,8 +23,8 @@
 #ifndef JSON_H
 #define JSON_H
 
-#include "bool.h"
 #include "strbuf.h"
+#include "types.h"
 
 int json_encode_bool(struct strbuf *json, bool value);
 int json_encode_integer(struct strbuf *json, long long value);

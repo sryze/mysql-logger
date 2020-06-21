@@ -25,19 +25,7 @@
 
 #include <stddef.h>
 #include "socket_ext.h"
-
-#ifdef _MSC_VER
-  typedef unsigned __int8 ws_uint8_t;
-  typedef unsigned __int16 ws_uint16_t;
-  typedef unsigned __int32 ws_uint32_t;
-  typedef unsigned __int64 ws_uint64_t;
-#else
-  #include <stdint.h>
-  typedef uint8_t ws_uint8_t;
-  typedef uint16_t ws_uint16_t;
-  typedef uint32_t ws_uint32_t;
-  typedef uint64_t ws_uint64_t;
-#endif
+#include "types.h"
 
 #define WS_PROTOCOL_VERSION 13
 
@@ -79,15 +67,15 @@ int ws_send(
   int opcode,
   const char *data,
   size_t len,
-  ws_uint32_t flags,
-  ws_uint32_t masking_key);
+  uint32_t flags,
+  uint32_t masking_key);
 int ws_send_text(
   socket_t sock,
   const char *text,
-  ws_uint16_t flags,
-  ws_uint32_t masking_key);
+  uint16_t flags,
+  uint32_t masking_key);
 int ws_send_close(socket_t sock,
-  ws_uint16_t flags,
-  ws_uint32_t masking_key);
+  uint16_t flags,
+  uint32_t masking_key);
 
 #endif /* WS_H */

@@ -24,11 +24,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "base64.h"
-#include "bool.h"
 #include "http.h"
 #include "sha1.h"
 #include "socket_ext.h"
 #include "string_ext.h"
+#include "types.h"
 #include "ws.h"
 
 #define count_of(a) (sizeof(a) / sizeof(a[0]))
@@ -141,7 +141,7 @@ int ws_parse_connect_request(const char *buf,
   return 0;
 }
 
-static ws_uint64_t ws_hton64(ws_uint64_t x)
+static uint64_t ws_hton64(uint64_t x)
 {
 #ifdef _WIN32
   return htonll(x);
@@ -211,31 +211,31 @@ int ws_send_handshake_accept(socket_t sock, const char *key)
   return error;
 }
 
-static ws_uint8_t *ws_alloc_frame(ws_uint16_t flags,
-                                  ws_uint8_t opcode,
-                                  ws_uint32_t masking_key,
-                                  const char *payload,
-                                  size_t payload_len,
-                                  size_t *size)
+static uint8_t *ws_alloc_frame(uint16_t flags,
+                               uint8_t opcode,
+                               uint32_t masking_key,
+                               const char *payload,
+                               size_t payload_len,
+                               size_t *size)
 {
-  ws_uint8_t payload_len_high;
-  ws_uint8_t payload_ext_len_size;
-  ws_uint16_t header;
-  ws_uint8_t *data;
-  ws_uint16_t offset = 0;
+  uint8_t payload_len_high;
+  uint8_t payload_ext_len_size;
+  uint16_t header;
+  uint8_t *data;
+  uint16_t offset = 0;
   size_t frame_size;
 
   (void)masking_key; /* TODO: Implement masking */
 
   if (payload_len < PAYLOAD_LENGTH_16) {
-    payload_len_high = (ws_uint8_t)payload_len;
+    payload_len_high = (uint8_t)payload_len;
     payload_ext_len_size = 0;
-  } else if (payload_len <= (ws_uint64_t)0xFFFF) {
+  } else if (payload_len <= (uint64_t)0xFFFF) {
     payload_len_high = PAYLOAD_LENGTH_16;
-    payload_ext_len_size = (ws_uint8_t)sizeof(ws_uint16_t);
+    payload_ext_len_size = (uint8_t)sizeof(uint16_t);
   } else {
     payload_len_high = PAYLOAD_LENGTH_64;
-    payload_ext_len_size = (ws_uint8_t)sizeof(ws_uint64_t);
+    payload_ext_len_size = (uint8_t)sizeof(uint64_t);
   }
 
   frame_size = sizeof(header)
@@ -256,19 +256,19 @@ static ws_uint8_t *ws_alloc_frame(ws_uint16_t flags,
 
   if (payload_ext_len_size != 0) {
     switch (payload_ext_len_size) {
-      case sizeof(ws_uint16_t):
-        *(ws_uint16_t *)(data + offset) = htons((ws_uint16_t)payload_len);
+      case sizeof(uint16_t):
+        *(uint16_t *)(data + offset) = htons((uint16_t)payload_len);
         break;
-      case sizeof(ws_uint64_t):
-        *(ws_uint64_t *)(data + offset) = ws_hton64(payload_len);
+      case sizeof(uint64_t):
+        *(uint64_t *)(data + offset) = ws_hton64(payload_len);
         break;
     }
     offset += payload_ext_len_size;
   }
 
   if ((flags & WS_FLAG_MASK) != 0) {
-    *(ws_uint16_t *)(data + offset) = htons(masking_key);
-    offset += sizeof(ws_uint16_t);
+    *(uint16_t *)(data + offset) = htons(masking_key);
+    offset += sizeof(uint16_t);
   }
 
   memcpy(data + offset, payload, payload_len);
@@ -280,10 +280,10 @@ int ws_send(socket_t sock,
             int opcode,
             const char *data,
             size_t len,
-            ws_uint32_t flags,
-            ws_uint32_t masking_key)
+            uint32_t flags,
+            uint32_t masking_key)
 {
-  ws_uint8_t *frame;
+  uint8_t *frame;
   size_t frame_size;
   int error;
 
@@ -301,15 +301,15 @@ int ws_send(socket_t sock,
 
 int ws_send_text(socket_t sock,
                  const char *text,
-                 ws_uint16_t flags,
-                 ws_uint32_t masking_key)
+                 uint16_t flags,
+                 uint32_t masking_key)
 {
   return ws_send(sock, WS_OP_TEXT, text, strlen(text), flags, masking_key);
 }
 
 int ws_send_close(socket_t sock,
-                  ws_uint16_t flags,
-                  ws_uint32_t masking_key)
+                  uint16_t flags,
+                  uint32_t masking_key)
 {
   return ws_send(sock, WS_OP_CLOSE, NULL, 0, 0, 0);
 }

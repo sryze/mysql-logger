@@ -26,6 +26,17 @@
 #include <string.h>
 #include "socket_ext.h"
 
+int close_socket_nicely(socket_t sock)
+{
+  int error;
+
+  error = shutdown(sock, SHUT_RDWR);
+  if (error == 0) {
+    return close_socket(sock);
+  }
+  return error;
+}
+
 int recv_n(socket_t sock, char *buf, int size, recv_handler_t handler)
 {
   int len = 0;
