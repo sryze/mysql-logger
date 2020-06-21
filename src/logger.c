@@ -46,6 +46,7 @@
 #endif
 
 #define UNUSED(x) (void)(x)
+#define MAX_ERROR_LENGTH 1024
 #define MAX_HTTP_HEADERS (8 * 1024) /* HTTP RFC recommends at least 8000 */
 #define MAX_WS_CLIENTS 32
 #define MAX_WS_MESSAGE_LEN 4096
@@ -151,64 +152,60 @@ static void start_server(unsigned short port,
                          volatile bool *flag,
                          void (*handler)(socket_t, struct sockaddr_in *))
 {
-  socket_t server_sock;
+  char error_buf[MAX_ERROR_LENGTH];
+  socket_t listen_sock;
   socket_t client_sock;
   struct sockaddr_in server_addr;
   struct sockaddr_in client_addr;
   socklen_t client_addr_len = sizeof(client_addr);
-  int opt_reuseaddr;
+  int opt;
 
-  server_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-  if (server_sock < 0) {
-    log_printf("ERROR: Could not open socket: %d\n", last_socket_error());
+  listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if (listen_sock < 0) {
+    log_printf("ERROR: Could not open socket: %s\n",
+        socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
     return;
   }
 
   /*
-   * Allow reuse of this socket address (port) - this makes restarts faster.
-   *
-   * Sockets are usually waited on for some time by the system after they are
-   * closed (netstat shows them in a TIME_WAIT state).
+   * Allow reuse of this socket address (port) without waiting.
    */
-  opt_reuseaddr = 1;
-  setsockopt(server_sock,
-             SOL_SOCKET,
-             SO_REUSEADDR,
-             (const void *)&opt_reuseaddr,
-             sizeof(opt_reuseaddr));
+  opt = 1;
+  setsockopt(
+      listen_sock, SOL_SOCKET, SO_REUSEADDR, (void *)&opt, sizeof(opt));
 
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
   server_addr.sin_port = htons(port);
-  if (bind(server_sock,
+  if (bind(listen_sock,
            (struct sockaddr *)&server_addr,
            sizeof(server_addr)) != 0) {
-    close_socket(server_sock);
-    log_printf("ERROR: Could not bind to port %u: %d\n",
-               port,
-               last_socket_error());
+    close_socket(listen_sock);
+    log_printf("ERROR: Could not bind to port %u: %s\n",
+        port,
+        socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
     return;
   }
 
-  if (listen(server_sock, 1) != 0) {
-    close_socket(server_sock);
+  if (listen(listen_sock, 32) != 0) {
+    close_socket(listen_sock);
     log_printf(
-      "ERROR: Could not start listening for connections: %d\n",
-      last_socket_error());
+        "ERROR: Could not start listening for connections: %s\n",
+        socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
     return;
   }
 
   assert(sock != NULL);
   assert(flag != NULL);
-  *sock = server_sock;
+  *sock = listen_sock;
 
   while (*flag) {
-    client_sock = accept(server_sock,
+    client_sock = accept(listen_sock,
                          (struct sockaddr *)&client_addr,
                          &client_addr_len);
-    if (client_sock < 0) {
-      log_printf("ERROR: Could not accept connection: %d\n",
-                 last_socket_error());
+    if (client_sock == INVALID_SOCKET) {
+      log_printf("ERROR: Could not accept connection: %s\n",
+          socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
       continue;
     }
     handler(client_sock, &client_addr);
@@ -217,31 +214,33 @@ static void start_server(unsigned short port,
 
 static bool perform_ws_handshake(socket_t sock)
 {
-  int error;
   char buf[MAX_HTTP_HEADERS] = {0};
   int len;
+  int error;
+  char error_buf[MAX_ERROR_LENGTH];
   const char *key;
   size_t key_len;
   char *key_copy;
 
   len = http_recv_headers(sock, buf, sizeof(buf));
   if (len <= 0) {
-    log_printf("ERROR: Could not receive HTTP headers: %d\n",
-               last_socket_error());
+    log_printf("ERROR: Could not receive HTTP headers: %s\n",
+        socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
     return false;
   }
 
   error = ws_parse_connect_request(buf, (size_t)len, &key, &key_len);
   if (error != 0) {
     log_printf("ERROR: WebSocket handshake error: %s\n",
-               ws_error_message(error));
+        ws_error_message(error));
     http_send_bad_request_error(sock);
     return false;
   }
 
   key_copy = strndup(key, key_len);
   if (key_copy == NULL) {
-    log_printf("ERROR: %s\n", strerror(errno));
+    log_printf("ERROR: %s\n",
+        socket_strerror(errno, error_buf, sizeof(error_buf)));
     http_send_internal_error(sock);
     return false;
   }
@@ -250,8 +249,8 @@ static bool perform_ws_handshake(socket_t sock)
   free(key_copy);
   if (error != 0) {
     log_printf(
-      "ERROR: Could not send WebSocket handshake accept response: %d\n",
-      error);
+        "ERROR: Could not send WebSocket handshake accept response: %s\n",
+        socket_strerror(error, error_buf, sizeof(error_buf)));
     return false;
   }
 
@@ -316,6 +315,7 @@ static void process_http_request(socket_t sock, struct sockaddr_in *addr)
 {
   char buf[MAX_HTTP_HEADERS];
   int len;
+  char error_buf[MAX_ERROR_LENGTH];
   struct http_fragment http_method;
   struct http_fragment request_target;
   int http_version;
@@ -324,8 +324,8 @@ static void process_http_request(socket_t sock, struct sockaddr_in *addr)
 
   len = http_recv_headers(sock, buf, sizeof(buf));
   if (len <= 0) {
-    log_printf("ERROR: Could not receive HTTP headers: %d\n",
-               last_socket_error());
+    log_printf("ERROR: Could not receive HTTP headers: %s\n",
+        socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
     return;
   }
 
@@ -518,6 +518,7 @@ static void process_pending_messages(void *arg)
 static int logger_plugin_init(void *arg)
 {
   int error;
+  char error_buf[MAX_ERROR_LENGTH];
 
   UNUSED(arg);
 
@@ -533,7 +534,8 @@ static int logger_plugin_init(void *arg)
   error = thread_create(
       &http_server_thread, process_http_requests, NULL);
   if (error != 0) {
-    log_printf("Failed to create HTTP server thread: %d\n", error);
+    log_printf("Failed to create HTTP server thread: %s\n",
+        socket_strerror(error, error_buf, sizeof(error_buf)));
     return error;
   }
   thread_set_name(ws_server_thread, "logger_http_server_thread");
@@ -542,7 +544,8 @@ static int logger_plugin_init(void *arg)
   error = thread_create(
       &ws_server_thread, process_ws_requests, NULL);
   if (error != 0) {
-    log_printf("Failed to create WebSocket server thread: %d\n", error);
+    log_printf("Failed to create WebSocket server thread: %s\n",
+        socket_strerror(error, error_buf, sizeof(error_buf)));
     return error;
   }
   thread_set_name(ws_server_thread, "logger_ws_server_thread");
@@ -551,7 +554,8 @@ static int logger_plugin_init(void *arg)
   error = thread_create(
       &message_thread, process_pending_messages, NULL);
   if (error != 0) {
-    log_printf("Failed to create messaging thread: %d\n", error);
+    log_printf("Failed to create messaging thread: %s\n",
+        socket_strerror(error, error_buf, sizeof(error_buf)));
     return error;
   }
   thread_set_name(message_thread, "logger_message_thread");
@@ -592,6 +596,7 @@ static int logger_plugin_deinit(void *arg)
   }
   mutex_unlock(&message_queue_mutex);
 
+  messaging_active = false;
   thread_join(message_thread);
 
   mutex_lock(&ws_clients_mutex);

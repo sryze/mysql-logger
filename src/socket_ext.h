@@ -51,6 +51,7 @@ int recv_n(socket_t sock, char *buf, int size, recv_handler_t handler);
 int send_n(socket_t sock, const char *buf, int size);
 int send_string(socket_t sock, char *s);
 
-int last_socket_error(void);
+int socket_errno(void);
+const char *socket_strerror(int error, char *buf, size_t size);
 
 #endif /* SOCKET_EXT_H */

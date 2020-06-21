@@ -205,7 +205,7 @@ int ws_send_handshake_accept(socket_t sock, const char *key)
     "Sec-WebSocket-Accept: %s\r\n\r\n",
     accept);
   if (send_string(sock, response) < 0) {
-    return last_socket_error();
+    return socket_errno();
   }
 
   return error;

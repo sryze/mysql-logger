@@ -48,6 +48,10 @@ else()
   message("Found MySQL headers: ${MYSQL_INCLUDE_DIR}")
 endif()
 
+if(WIN32)
+  add_definitions(-DWIN32_LEAN_AND_MEAN)
+endif()
+
 add_compile_options("$<$<CONFIG:DEBUG>:-DDEBUG>")
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/ui")

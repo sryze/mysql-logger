@@ -26,6 +26,10 @@
 #include <string.h>
 #include "socket_ext.h"
 
+#define MAX_ERROR_LENGTH 1024
+
+static char static_error_buf[MAX_ERROR_LENGTH];
+
 int close_socket_nicely(socket_t sock)
 {
   int error;
@@ -94,11 +98,182 @@ int send_string(socket_t sock, char *s)
   return send_n(sock, s, (int)len);
 }
 
-int last_socket_error(void)
+int socket_error(void)
 {
 #ifdef _WIN32
-  return GetLastError();
+  return WSAGetLastError();
 #else
   return errno;
 #endif
+}
+
+int socket_errno(void)
+{
+#ifdef _WIN32
+  int error = WSAGetLastError();
+  /* Mapping of WSA error codes to POSIX errors codes */
+  switch (error) {
+    case WSAEINTR:
+      return EINTR;
+    case WSAEBADF:
+      return EBADF;
+    case WSAEACCES:
+      return EACCES;
+    case WSAEFAULT:
+      return EFAULT;
+    case WSAEINVAL:
+      return EINVAL;
+    case WSAEMFILE:
+      return EMFILE;
+    case WSAEWOULDBLOCK:
+      return EWOULDBLOCK;
+    case WSAEINPROGRESS:
+      return EINPROGRESS;
+    case WSAEALREADY:
+      return EALREADY;
+    case WSAENOTSOCK:
+      return ENOTSOCK;
+    case WSAEDESTADDRREQ:
+      return EDESTADDRREQ;
+    case WSAEMSGSIZE:
+      return EMSGSIZE;
+    case WSAEPROTOTYPE:
+      return EPROTOTYPE;
+    case WSAENOPROTOOPT:
+      return ENOPROTOOPT;
+    case WSAEPROTONOSUPPORT:
+      return EPROTONOSUPPORT;
+    /*
+    case WSAESOCKTNOSUPPORT:
+      return ESOCKTNOSUPPORT;
+    */
+    case WSAEOPNOTSUPP:
+      return EOPNOTSUPP;
+    /*
+    case WSAEPFNOSUPPORT:
+      return EPFNOSUPPORT;
+    */
+    case WSAEAFNOSUPPORT:
+      return EAFNOSUPPORT;
+    case WSAEADDRINUSE:
+      return EADDRINUSE;
+    case WSAEADDRNOTAVAIL:
+      return EADDRNOTAVAIL;
+    case WSAENETDOWN:
+      return ENETDOWN;
+    case WSAENETUNREACH:
+      return ENETUNREACH;
+    case WSAENETRESET:
+      return ENETRESET;
+    case WSAECONNABORTED:
+      return ECONNABORTED;
+    case WSAECONNRESET:
+      return ECONNRESET;
+    case WSAENOBUFS:
+      return ENOBUFS;
+    case WSAEISCONN:
+      return EISCONN;
+    case WSAENOTCONN:
+      return ENOTCONN;
+    /*
+    case WSAESHUTDOWN:
+      return ESHUTDOWN;
+    case WSAETOOMANYREFS:
+      return ETOOMANYREFS;
+    */
+    case WSAETIMEDOUT:
+      return ETIMEDOUT;
+    case WSAECONNREFUSED:
+      return ECONNREFUSED;
+    case WSAELOOP:
+      return ELOOP;
+    case WSAENAMETOOLONG:
+      return ENAMETOOLONG;
+    /*
+    case WSAEHOSTDOWN:
+      return EHOSTDOWN;
+    */
+    case WSAEHOSTUNREACH:
+      return EHOSTUNREACH;
+    case WSAENOTEMPTY:
+      return ENOTEMPTY;
+    /*
+    case WSAEPROCLIM:
+      return EPROCLIM;
+    case WSAEUSERS:
+      return EUSERS;
+    case WSAEDQUOT:
+      return EDQUOT;
+    case WSAESTALE:
+      return ESTALE;
+    case WSAEREMOTE:
+      return EREMOTE;
+    */
+    case WSAVERNOTSUPPORTED:
+      return WSAVERNOTSUPPORTED;
+    /*
+    case WSAEDISCON:
+      return EDISCON;
+    case WSAENOMORE:
+      return ENOMORE;
+    case WSAECANCELLED:
+      return ECANCELLED;
+    */
+    default:
+      return error;
+  }
+#else
+  return errno;
+#endif
+}
+
+const char *socket_strerror(int error, char *buf, size_t size)
+{
+#ifdef _WIN32
+
+  if (error < WSABASEERR) {
+    /* C/POSIX error code */
+    if (buf != NULL) {
+      strerror_s(buf, size, error);
+      return buf;
+    } else {
+      return strerror(error);
+    }
+  } else {
+    /* Windows Sockets error code */
+    DWORD count;
+    if (buf == NULL) {
+      buf = static_error_buf;
+      size = sizeof(static_error_buf);
+    }
+    count = FormatMessageA(
+        FORMAT_MESSAGE_FROM_SYSTEM,
+        NULL,
+        error,
+        0,
+        buf,
+        (DWORD)size,
+        NULL);
+    if (count == 0) {
+      return "Unknown error";
+    }
+    /* Remove trailing newline and '.' characters (if any) */
+    while (buf[count - 1] == '\r'
+        || buf[count - 1] == '\n'
+        || buf[count - 1] == '.') {
+      buf[--count] = '\0';
+    }
+    return buf;
+  }
+
+#else /* _WIN32 */
+
+  if (buf != NULL) {
+    strerror_r(error, buf, size);
+    return buf;
+  } else {
+    return strerror(error);
+  }
+
+#endif /* !_WIN32 */
 }
