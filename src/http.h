@@ -23,8 +23,8 @@
 #ifndef HTTP_H
 #define HTTP_H
 
+#include "defs.h"
 #include "socket_ext.h"
-#include "types.h"
 
 struct http_fragment {
   const char *ptr;

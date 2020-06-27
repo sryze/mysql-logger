@@ -121,6 +121,9 @@ include_directories(
 add_library(logger SHARED
   src/base64.c
   src/base64.h
+  src/defs.h
+  src/error.c
+  src/error.h
   src/hex.c
   src/hex.h
   src/http.c
@@ -140,7 +143,6 @@ add_library(logger SHARED
   src/time.h
   src/thread.c
   src/thread.h
-  src/types.h
   src/ws.c
   src/ws.h
   "${CMAKE_CURRENT_BINARY_DIR}/src/ui_favicon_ico.h"

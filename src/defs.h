@@ -20,8 +20,10 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef TYPES_H
-#define TYPES_H
+#ifndef DEFS_H
+#define DEFS_H
+
+#include <stddef.h>
 
 #ifdef _MSC_VER
   typedef signed __int8 int8_t;
@@ -45,4 +47,10 @@
   #define __bool_true_false_are_defined
 #endif
 
-#endif /* TYPES_H */
+#if defined _MSC_VER
+  #define THREAD_LOCAL __declspec(thread)
+#elif defined __GNUC__
+  #define THREAD_LOCAL __thread
+#endif
+
+#endif /* DEFS_H */

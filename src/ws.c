@@ -24,11 +24,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "base64.h"
+#include "defs.h"
+#include "error.h"
 #include "http.h"
 #include "sha1.h"
 #include "socket_ext.h"
 #include "string_ext.h"
-#include "types.h"
 #include "ws.h"
 
 #define count_of(a) (sizeof(a) / sizeof(a[0]))
@@ -205,7 +206,7 @@ int ws_send_handshake_accept(socket_t sock, const char *key)
     "Sec-WebSocket-Accept: %s\r\n\r\n",
     accept);
   if (send_string(sock, response) < 0) {
-    return socket_errno();
+    return xerrno;
   }
 
   return error;

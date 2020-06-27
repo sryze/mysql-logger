@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Sergey Zolotarev
+ * Copyright (c) 2020 Sergey Zolotarev
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -20,40 +20,12 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef SOCKET_EXT_H
-#define SOCKET_EXT_H
+#ifndef ERROR_H
+#define ERROR_H
 
-#include <stdlib.h>
-#ifdef _WIN32
-  #include <winsock2.h>
-  #include <ws2tcpip.h>
-  typedef int socklen_t;
-  typedef SOCKET socket_t;
-  #define SHUT_RD SD_RECEIVE
-  #define SHUT_WR SD_SEND
-  #define SHUT_RDWR SD_BOTH
-  #define close_socket closesocket
-  #define ioctl_socket ioctlsocket
-#else
-  #include <sys/ioctl.h>
-  #include <sys/select.h>
-  #include <sys/socket.h>
-  #include <sys/types.h>
-  #include <netdb.h>
-  #include <unistd.h>
-  typedef int socket_t;
-  #define close_socket close
-  #define ioctl_socket ioctl
-  #define INVALID_SOCKET -1
-#endif
+#define xerrno xerrno_get()
 
-typedef int (*recv_handler_t)(
-    const char *buf, int len, int chunk_offset, int chunk_len);
+int xerrno_get(void);
+const char *xstrerror(int error);
 
-int close_socket_nicely(socket_t sock);
-
-int recv_n(socket_t sock, char *buf, int size, recv_handler_t handler);
-int send_n(socket_t sock, const char *buf, int size);
-int send_string(socket_t sock, char *s);
-
-#endif /* SOCKET_EXT_H */
+#endif /* ERROR_H */

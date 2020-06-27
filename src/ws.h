@@ -23,9 +23,8 @@
 #ifndef WS_H
 #define WS_H
 
-#include <stddef.h>
+#include "defs.h"
 #include "socket_ext.h"
-#include "types.h"
 
 #define WS_PROTOCOL_VERSION 13
 

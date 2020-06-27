@@ -28,6 +28,8 @@
 #include <string.h>
 #include <mysql/plugin.h>
 #include <mysql/plugin_audit.h>
+#include "defs.h"
+#include "error.h"
 #include "http.h"
 #include "json.h"
 #include "socket_ext.h"
@@ -35,7 +37,6 @@
 #include "string_ext.h"
 #include "time.h"
 #include "thread.h"
-#include "types.h"
 #include "ui_favicon_ico.h"
 #include "ui_index_html.h"
 #include "ui_index_css.h"
@@ -46,7 +47,6 @@
 #endif
 
 #define UNUSED(x) (void)(x)
-#define MAX_ERROR_LENGTH 1024
 #define MAX_HTTP_HEADERS (8 * 1024) /* HTTP RFC recommends at least 8000 */
 #define MAX_WS_CLIENTS 32
 #define MAX_WS_MESSAGE_LEN 4096
@@ -79,6 +79,7 @@ struct ws_message {
 };
 
 static bool loaded;
+static FILE *log_file;
 static mutex_t log_mutex;
 
 /* HTTP -> plugin */
@@ -128,8 +129,10 @@ static volatile long pending_message_count;
 static mutex_t message_queue_mutex;
 
 #if MYSQL_AUDIT_INTERFACE_VERSION < 0x0302
-  static long query_id_counter = 1;
+  static volatile long query_id_counter = 1;
 #endif
+
+void sql_print_error(const char *format, ...);
 
 static void log_printf(const char *format, ...)
 {
@@ -137,11 +140,10 @@ static void log_printf(const char *format, ...)
 
   mutex_lock(&log_mutex);
 
-  printf("LOGGER: ");
   va_start(args, format);
-  vprintf(format, args);
+  vfprintf(log_file, format, args);
   va_end(args);
-  fflush(stdout);
+  fflush(log_file);
 
   mutex_unlock(&log_mutex);
 }
@@ -151,7 +153,6 @@ static void start_server(unsigned short port,
                          volatile bool *flag,
                          void (*handler)(socket_t, struct sockaddr_in *))
 {
-  char error_buf[MAX_ERROR_LENGTH];
   socket_t listen_sock;
   socket_t client_sock;
   struct sockaddr_in server_addr;
@@ -163,8 +164,7 @@ static void start_server(unsigned short port,
 
   listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (listen_sock < 0) {
-    log_printf("ERROR: Could not open socket: %s\n",
-        socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
+    log_printf("ERROR: Could not open socket: %s\n", xstrerror(xerrno));
     return;
   }
 
@@ -181,8 +181,9 @@ static void start_server(unsigned short port,
    */
   opt = 1;
   if (ioctl_socket(listen_sock, FIONBIO, &opt) != 0) {
-    log_printf("ERROR: Could not change socket I/O mode: %s\n",
-        socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
+    log_printf(
+        "ERROR: Could not change socket I/O mode: %s\n",
+        xstrerror(xerrno));
     return;
   }
 
@@ -193,9 +194,10 @@ static void start_server(unsigned short port,
            (struct sockaddr *)&server_addr,
            sizeof(server_addr)) != 0) {
     close_socket(listen_sock);
-    log_printf("ERROR: Could not bind to port %u: %s\n",
+    log_printf(
+        "ERROR: Could not bind to port %u: %s\n",
         port,
-        socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
+        xstrerror(xerrno));
     return;
   }
 
@@ -203,7 +205,7 @@ static void start_server(unsigned short port,
     close_socket(listen_sock);
     log_printf(
         "ERROR: Could not start listening for connections: %s\n",
-        socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
+        xstrerror(xerrno));
     return;
   }
 
@@ -225,7 +227,7 @@ static void start_server(unsigned short port,
     result = select((int)listen_sock + 1, &working_set, NULL, NULL, &timeout);
     if (result < 0) {
       log_printf("ERROR: Socket monitoring failed: %s\n",
-          socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
+          xstrerror(xerrno));
       break;
     }
 
@@ -235,7 +237,7 @@ static void start_server(unsigned short port,
                            &client_addr_len);
       if (client_sock < 0) {
         log_printf("ERROR: Could not accept connection: %s\n",
-            socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
+            xstrerror(xerrno));
         continue;
       }
       /*
@@ -244,7 +246,7 @@ static void start_server(unsigned short port,
       opt = 0;
       if (ioctl_socket(client_sock, FIONBIO, &opt) != 0) {
         log_printf("ERROR: Could not change socket I/O mode: %s\n",
-            socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
+            xstrerror(xerrno));
         return;
       }
       handler(client_sock, &client_addr);
@@ -257,7 +259,6 @@ static bool perform_ws_handshake(socket_t sock)
   char buf[MAX_HTTP_HEADERS] = {0};
   int len;
   int error;
-  char error_buf[MAX_ERROR_LENGTH];
   const char *key;
   size_t key_len;
   char *key_copy;
@@ -265,7 +266,7 @@ static bool perform_ws_handshake(socket_t sock)
   len = http_recv_headers(sock, buf, sizeof(buf));
   if (len <= 0) {
     log_printf("ERROR: Could not receive HTTP headers: %s\n",
-        socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
+        xstrerror(xerrno));
     return false;
   }
 
@@ -279,8 +280,7 @@ static bool perform_ws_handshake(socket_t sock)
 
   key_copy = strndup(key, key_len);
   if (key_copy == NULL) {
-    log_printf("ERROR: %s\n",
-        socket_strerror(errno, error_buf, sizeof(error_buf)));
+    log_printf("ERROR: %s\n",xstrerror(errno));
     http_send_internal_error(sock);
     return false;
   }
@@ -290,7 +290,7 @@ static bool perform_ws_handshake(socket_t sock)
   if (error != 0) {
     log_printf(
         "ERROR: Could not send WebSocket handshake accept response: %s\n",
-        socket_strerror(error, error_buf, sizeof(error_buf)));
+        xstrerror(error));
     return false;
   }
 
@@ -355,7 +355,6 @@ static void process_http_request(socket_t sock, struct sockaddr_in *addr)
 {
   char buf[MAX_HTTP_HEADERS];
   int len;
-  char error_buf[MAX_ERROR_LENGTH];
   struct http_fragment http_method;
   struct http_fragment request_target;
   int http_version;
@@ -365,7 +364,7 @@ static void process_http_request(socket_t sock, struct sockaddr_in *addr)
   len = http_recv_headers(sock, buf, sizeof(buf));
   if (len <= 0) {
     log_printf("ERROR: Could not receive HTTP headers: %s\n",
-        socket_strerror(socket_errno(), error_buf, sizeof(error_buf)));
+        xstrerror(xerrno));
     return;
   }
 
@@ -558,18 +557,27 @@ static void process_pending_messages(void *arg)
 static int logger_plugin_init(void *arg)
 {
   int error;
-  char error_buf[MAX_ERROR_LENGTH];
 
   UNUSED(arg);
 
-  log_printf("Logger plugin is initializing...\n");
-
-  if (loaded) {
-    log_printf("Already loaded!\n");
+  log_file = fopen("logger.log", "w");
+  if (log_file == NULL) {
+    fprintf(stderr, "Failed to open log file: %s\n", xstrerror(errno));
     return 1;
   }
 
-  mutex_create(&log_mutex);
+  if (mutex_create(&log_mutex) != 0) {
+    fprintf(stderr, "Failed to create log mutex: %s\n", xstrerror(xerrno));
+    return 1;
+  }
+
+  if (loaded) {
+    log_printf("Logger plugin is already loaded!\n");
+    return 1;
+  }
+
+  log_printf("Logger plugin is initializing...\n");
+
   mutex_create(&ws_clients_mutex);
   mutex_create(&message_queue_mutex);
 
@@ -577,8 +585,7 @@ static int logger_plugin_init(void *arg)
   error = thread_create(
       &http_server_thread, process_http_requests, NULL);
   if (error != 0) {
-    log_printf("Failed to create HTTP server thread: %s\n",
-        socket_strerror(error, error_buf, sizeof(error_buf)));
+    log_printf("Failed to create HTTP server thread: %s\n", xstrerror(error));
     return error;
   }
   thread_set_name(ws_server_thread, "logger_http_server_thread");
@@ -588,7 +595,7 @@ static int logger_plugin_init(void *arg)
       &ws_server_thread, process_ws_requests, NULL);
   if (error != 0) {
     log_printf("Failed to create WebSocket server thread: %s\n",
-        socket_strerror(error, error_buf, sizeof(error_buf)));
+        xstrerror(error));
     return error;
   }
   thread_set_name(ws_server_thread, "logger_ws_server_thread");
@@ -597,8 +604,7 @@ static int logger_plugin_init(void *arg)
   error = thread_create(
       &message_thread, process_pending_messages, NULL);
   if (error != 0) {
-    log_printf("Failed to create messaging thread: %s\n",
-        socket_strerror(error, error_buf, sizeof(error_buf)));
+    log_printf("Failed to create messaging thread: %s\n", xstrerror(error));
     return error;
   }
   thread_set_name(message_thread, "logger_message_thread");
@@ -666,6 +672,8 @@ static int logger_plugin_deinit(void *arg)
   mutex_destroy(&ws_clients_mutex);
   mutex_destroy(&log_mutex);
   mutex_destroy(&message_queue_mutex);
+
+  fclose(log_file);
 
   return 0;
 }

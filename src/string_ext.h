@@ -26,7 +26,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
-#include "types.h"
+#include "defs.h"
 
 #if defined _WIN32 && (defined _MSC_VER || !defined __GNUC__)
   #if !defined _MSC_VER || _MSC_VER <= 1900
