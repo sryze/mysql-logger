@@ -78,7 +78,7 @@ struct ws_message {
   struct ws_message *next;
 };
 
-static bool plugin_ready;
+static bool loaded;
 static mutex_t log_mutex;
 
 /* HTTP -> plugin */
@@ -562,7 +562,10 @@ static int logger_plugin_init(void *arg)
 
   UNUSED(arg);
 
-  if (plugin_ready) {
+  log_printf("Logger plugin is initializing...\n");
+
+  if (loaded) {
+    log_printf("Already loaded!\n");
     return 1;
   }
 
@@ -600,8 +603,8 @@ static int logger_plugin_init(void *arg)
   }
   thread_set_name(message_thread, "logger_message_thread");
 
-  plugin_ready = true;
-  log_printf("Logger plugin initialized\n");
+  log_printf("Logger plugin started successfully\n");
+  loaded = true;
 
   return 0;
 }
@@ -611,7 +614,7 @@ static int logger_plugin_deinit(void *arg)
   UNUSED(arg);
 
   log_printf("Logger plugin is being deinitialized...\n");
-  plugin_ready = false;
+  loaded = false;
 
   http_server_active = false;
   thread_join(http_server_thread);
@@ -671,7 +674,7 @@ static void logger_notify(MYSQL_THD thd,
                           unsigned int event_class,
                           const void *event)
 {
-  if (!plugin_ready) {
+  if (!loaded) {
     return;
   }
 
