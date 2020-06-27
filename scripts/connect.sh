@@ -5,4 +5,4 @@ if [ `uname -s` = 'Linux' ]; then
   SOCKET="-S /tmp/mysql.sock"
 fi
 
-mysql -uroot $SOCKET $*
+mysql -P3307 -uroot $SOCKET $*
