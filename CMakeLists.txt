@@ -48,11 +48,20 @@ else()
   message("Found MySQL headers: ${MYSQL_INCLUDE_DIR}")
 endif()
 
+if(CMAKE_C_COMPILER_ID MATCHES ".*Clang.*")
+  set(COMPILER_IS_CLANG 1)
+endif()
+
 if(WIN32)
   add_definitions(-DWIN32_LEAN_AND_MEAN)
 endif()
 
 add_compile_options("$<$<CONFIG:DEBUG>:-DDEBUG>")
+
+if(CMAKE_COMPILER_IS_GNUCC OR COMPILER_IS_CLANG)
+  add_compile_options(-Wall)
+  add_compile_options("$<$<CONFIG:RELEASE>:-Werror>")
+endif()
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/ui")
 add_executable(file_concat
@@ -92,10 +101,6 @@ add_http_resource(
   "${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_js.h"
   ui_index_js
 )
-
-if(CMAKE_C_COMPILER_ID MATCHES ".*Clang.*")
-  set(COMPILER_IS_CLANG 1)
-endif()
 
 add_definitions(-DMYSQL_DYNAMIC_PLUGIN)
 
