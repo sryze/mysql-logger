@@ -150,7 +150,12 @@ add_library(logger SHARED
   "${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_css.h"
   "${CMAKE_CURRENT_BINARY_DIR}/src/ui_index_js.h"
 )
+
 set_target_properties(logger PROPERTIES PREFIX "")
+if(NOT WIN32)
+  # MySQL server doesn't support .dylib extension.
+  set_target_properties(logger PROPERTIES SUFFIX ".so")
+endif()
 
 if(CMAKE_COMPILER_IS_GNUCC OR COMPILER_IS_CLANG)
   target_compile_options(logger PRIVATE "-fno-omit-frame-pointer")
