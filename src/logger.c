@@ -132,8 +132,6 @@ static mutex_t message_queue_mutex;
   static volatile long query_id_counter = 1;
 #endif
 
-void sql_print_error(const char *format, ...);
-
 static void log_printf(const char *format, ...)
 {
   va_list args;
