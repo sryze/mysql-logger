@@ -63,7 +63,7 @@ struct ws_client {
   mutex_t mutex;
   bool connected;
   socket_t socket;
-  struct sockaddr_in address;
+  struct sockaddr address;
 };
 
 struct http_resource {
@@ -140,6 +140,13 @@ static void log_printf(const char *format, ...)
 
   mutex_lock(&log_mutex);
 
+#ifdef DEBUG
+  va_start(args, format);
+  printf("LOGGER: ");
+  vprintf(format, args);
+  va_end(args);
+#endif
+
   va_start(args, format);
   vfprintf(log_file, format, args);
   va_end(args);
@@ -151,7 +158,7 @@ static void log_printf(const char *format, ...)
 static void start_server(unsigned short port,
                          socket_t *sock,
                          volatile bool *flag,
-                         void (*handler)(socket_t, struct sockaddr_in *))
+                         int (*handler)(socket_t))
 {
   socket_t listen_sock;
   socket_t client_sock;
@@ -159,7 +166,7 @@ static void start_server(unsigned short port,
   struct sockaddr_in client_addr;
   socklen_t client_addr_len = sizeof(client_addr);
   int opt;
-  fd_set listen_set, working_set;
+  fd_set fds, ready_fds;
 
   listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (listen_sock < 0) {
@@ -200,34 +207,67 @@ static void start_server(unsigned short port,
   assert(flag != NULL);
   *sock = listen_sock;
 
-  FD_ZERO(&listen_set);
-  FD_SET(listen_sock, &listen_set);
+  FD_ZERO(&fds);
+  FD_SET(listen_sock, &fds);
 
   while (*flag) {
     int result;
     struct timeval timeout;
+    int i;
+    int max_fd = -1;
 
-    memcpy(&working_set, &listen_set, sizeof(fd_set));
+    memcpy(&ready_fds, &fds, sizeof(fd_set));
     timeout.tv_sec = 0;
     timeout.tv_usec = 10000; /* 10 ms */
 
-    result = select((int)listen_sock + 1, &working_set, NULL, NULL, &timeout);
+#ifdef _WIN32
+    for (i = 0; i < (int)ready_fds.fd_count; i++) {
+      socket_t sock = ready_fds.fd_array[i];
+#else
+    for (i = 0; i < (int)FD_SETSIZE; i++) {
+      socket_t sock = (socket_t)i;
+#endif
+      if (FD_ISSET(sock, &fds)/* && i > max_fd*/) {
+        max_fd = (int)sock;
+      }
+    }
+
+    result = select(max_fd + 1, &ready_fds, NULL, NULL, &timeout);
     if (result < 0) {
       log_printf("ERROR: Socket monitoring failed: %s\n", xstrerror(xerrno));
       break;
     }
 
-    if (FD_ISSET(listen_sock, &working_set)) {
-      client_sock = accept(listen_sock,
-                           (struct sockaddr *)&client_addr,
-                           &client_addr_len);
-      if (client_sock < 0) {
-        log_printf(
-            "ERROR: Could not accept connection: %s\n",
-            xstrerror(xerrno));
-        continue;
+#ifdef _WIN32
+    for (i = 0; i < (int)ready_fds.fd_count; i++) {
+      socket_t sock = ready_fds.fd_array[i];
+      {
+#else
+    for (i = 0; i < (int)FD_SETSIZE; i++) {
+      if (FD_ISSET(i, &ready_fds)) {
+        socket_t sock = (socket_t)i;
+#endif
+        if (sock == listen_sock) {
+          /* Server socket is ready to accept a new client connection. */
+          client_sock = accept(listen_sock,
+                               (struct sockaddr *)&client_addr,
+                               &client_addr_len);
+          if (client_sock < 0) {
+            log_printf(
+                "ERROR: Could not accept connection: %s\n",
+                xstrerror(xerrno));
+          } else {
+            FD_SET(client_sock, &fds);
+          }
+        } else {
+          /* One of the client sockets is ready to receive data. */
+          result = handler(sock);
+          if (result != 0) {
+            FD_CLR(sock, &fds);
+            close_socket_nicely(sock);
+          }
+        }
       }
-      handler(client_sock, &client_addr);
     }
   }
 }
@@ -242,8 +282,8 @@ static bool perform_ws_handshake(socket_t sock)
   char *key_copy;
 
   len = http_recv_headers(sock, buf, sizeof(buf));
-  if (len <= 0) {
-    log_printf("ERROR: Could not receive HTTP headers: %s\n",
+  if (len < 0) {
+    log_printf("ERROR: Could not receive HTTP request headers: %s\n",
         xstrerror(xerrno));
     return false;
   }
@@ -275,20 +315,19 @@ static bool perform_ws_handshake(socket_t sock)
   return true;
 }
 
-static void process_ws_request(socket_t sock, struct sockaddr_in *addr)
+static int process_ws_request(socket_t sock)
 {
   struct ws_client *client = NULL;
+  struct sockaddr addr;
+  socklen_t addr_len = sizeof(addr);
+  char ip_str[INET_ADDRSTRLEN] = {0};
 
   if (!perform_ws_handshake(sock)) {
-    close_socket(sock);
-    return;
+    return -1;
   }
 
-  char ip_str[INET_ADDRSTRLEN] = { 0 };
-  if (inet_ntop(addr->sin_family,
-                &addr->sin_addr,
-                ip_str,
-                sizeof(ip_str)) != NULL) {
+  if (getpeername(sock, &addr, &addr_len) == 0
+      && inet_ntop(addr.sa_family, &addr, ip_str, sizeof(ip_str)) != NULL) {
     log_printf("WebSocket client connected: %s\n", ip_str);
   } else {
     log_printf("WebSocket client connected (unknown address)\n");
@@ -301,7 +340,7 @@ static void process_ws_request(socket_t sock, struct sockaddr_in *addr)
         client = &ws_clients[i];
         client->connected = true;
         client->socket = sock;
-        client->address = *addr;
+        client->address = addr;
         mutex_create(&client->mutex);
         break;
       }
@@ -312,8 +351,10 @@ static void process_ws_request(socket_t sock, struct sockaddr_in *addr)
   if (client == NULL) {
     log_printf("Client limit reached, closing connection\n");
     ws_send_close(sock, 0, 0);
-    close_socket(sock);
+    return -1;
   }
+
+  return 0;
 }
 
 static void process_ws_requests(void *arg)
@@ -329,7 +370,7 @@ static void process_ws_requests(void *arg)
       process_ws_request);
 }
 
-static void process_http_request(socket_t sock, struct sockaddr_in *addr)
+static int process_http_request(socket_t sock)
 {
   char buf[MAX_HTTP_HEADERS];
   int len;
@@ -340,10 +381,10 @@ static void process_http_request(socket_t sock, struct sockaddr_in *addr)
   size_t resource_count = sizeof(http_resources) / sizeof(http_resources[0]);
 
   len = http_recv_headers(sock, buf, sizeof(buf));
-  if (len <= 0) {
-    log_printf("ERROR: Could not receive HTTP headers: %s\n",
+  if (len < 0) {
+    log_printf("ERROR: Could not receive HTTP request headers: %s\n",
         xstrerror(xerrno));
-    return;
+    return xerrno;
   }
 
   if (http_parse_request_line(buf,
@@ -351,13 +392,13 @@ static void process_http_request(socket_t sock, struct sockaddr_in *addr)
                               &request_target,
                               &http_version) == NULL) {
     log_printf("ERROR: Could not parse HTTP request\n");
-    return;
+    return -1;
   }
 
   if (http_version > 0x01FF) {
     log_printf("ERROR: Unsupported HTTP version %x\n", http_version);
     http_send_bad_request_error(sock);
-    return;
+    return -1;
   }
 
   for (i = 0; i < resource_count; i++) {
@@ -383,6 +424,8 @@ static void process_http_request(socket_t sock, struct sockaddr_in *addr)
   if (i == resource_count) {
     http_send_bad_request_error(sock);
   }
+
+  return 0;
 }
 
 static void process_http_requests(void *arg)
@@ -569,8 +612,7 @@ static int logger_plugin_init(void *arg)
   thread_set_name(ws_server_thread, "logger_http_server_thread");
 
   ws_server_active = true;
-  error = thread_create(
-      &ws_server_thread, process_ws_requests, NULL);
+  error = thread_create(&ws_server_thread, process_ws_requests, NULL);
   if (error != 0) {
     log_printf("Failed to create WebSocket server thread: %s\n",
         xstrerror(error));
@@ -579,8 +621,7 @@ static int logger_plugin_init(void *arg)
   thread_set_name(ws_server_thread, "logger_ws_server_thread");
 
   messaging_active = true;
-  error = thread_create(
-      &message_thread, process_pending_messages, NULL);
+  error = thread_create(&message_thread, process_pending_messages, NULL);
   if (error != 0) {
     log_printf("Failed to create messaging thread: %s\n", xstrerror(error));
     return error;
