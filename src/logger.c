@@ -146,10 +146,11 @@ static void log_printf(const char *format, ...)
   va_end(args);
 #endif
 
-  va_start(args, format);
-  vfprintf(log_file, format, args);
-  va_end(args);
-  fflush(log_file);
+  if (log_file) {
+    va_start(args, format);
+    vfprintf(log_file, format, args);
+    va_end(args);
+  }
 
   mutex_unlock(&log_mutex);
 }
@@ -639,20 +640,19 @@ static int logger_plugin_init(void *arg)
 
   UNUSED(arg);
 
-  log_file = fopen("logger.log", "w");
-  if (log_file == NULL) {
-    fprintf(stderr, "Failed to open log file: %s\n", xstrerror(errno));
+  if (loaded) {
     return 1;
   }
 
   if (mutex_create(&log_mutex) != 0) {
     fprintf(stderr, "Failed to create log mutex: %s\n", xstrerror(xerrno));
-    return 1;
-  }
-
-  if (loaded) {
-    log_printf("Logger plugin is already loaded!\n");
-    return 1;
+  } else {
+    log_file = fopen("logger.log", "w");
+    if (log_file == NULL) {
+      fprintf(stderr,
+          "Could not open log file for writing: %s\n",
+          xstrerror(errno));
+    }
   }
 
   log_printf("Logger plugin is initializing...\n");
