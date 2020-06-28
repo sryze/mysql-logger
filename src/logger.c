@@ -64,6 +64,7 @@ struct ws_client {
   bool connected;
   socket_t socket;
   struct sockaddr address;
+  char address_str[INET6_ADDRSTRLEN];
 };
 
 struct http_resource {
@@ -153,10 +154,10 @@ static void log_printf(const char *format, ...)
   mutex_unlock(&log_mutex);
 }
 
-static void start_server(unsigned short port,
-                         socket_t *sock,
-                         volatile bool *flag,
-                         int (*handler)(socket_t))
+static void serve(unsigned short port,
+                  socket_t *sock,
+                  volatile bool *flag,
+                  int (*handler)(socket_t))
 {
   socket_t listen_sock;
   socket_t client_sock;
@@ -246,7 +247,7 @@ static void start_server(unsigned short port,
         socket_t sock = (socket_t)i;
 #endif
         if (sock == listen_sock) {
-          /* Server socket is ready to accept a new client connection. */
+          /* Server socket is ready to accept a new client connection */
           client_sock = accept(listen_sock,
                                (struct sockaddr *)&client_addr,
                                &client_addr_len);
@@ -258,11 +259,12 @@ static void start_server(unsigned short port,
             FD_SET(client_sock, &fds);
           }
         } else {
-          /* One of the client sockets is ready to receive data. */
-          result = handler(sock);
-          if (result != 0) {
+          char buf[1];
+          /* One of the client sockets is ready to be read */
+          result = recv(sock, buf, sizeof(buf), MSG_PEEK);
+          if (result == 0 || handler(sock) != 0) {
+            close_socket(sock);
             FD_CLR(sock, &fds);
-            close_socket_nicely(sock);
           }
         }
       }
@@ -270,7 +272,7 @@ static void start_server(unsigned short port,
   }
 }
 
-static bool perform_ws_handshake(socket_t sock)
+static int perform_ws_handshake(socket_t sock)
 {
   char buf[MAX_HTTP_HEADERS] = {0};
   int len;
@@ -283,7 +285,10 @@ static bool perform_ws_handshake(socket_t sock)
   if (len < 0) {
     log_printf("ERROR: Could not receive HTTP request headers: %s\n",
         xstrerror(xerrno));
-    return false;
+    return -1;
+  }
+  if (len == 0) { /* EOF */
+    return -1;
   }
 
   error = ws_parse_connect_request(buf, (size_t)len, &key, &key_len);
@@ -291,14 +296,14 @@ static bool perform_ws_handshake(socket_t sock)
     log_printf("ERROR: WebSocket handshake error: %s\n",
         ws_error_message(error));
     http_send_bad_request_error(sock);
-    return false;
+    return -1;
   }
 
   key_copy = strndup(key, key_len);
   if (key_copy == NULL) {
     log_printf("ERROR: %s\n",xstrerror(errno));
     http_send_internal_error(sock);
-    return false;
+    return -1;
   }
 
   error = ws_send_handshake_accept(sock, key_copy);
@@ -307,38 +312,73 @@ static bool perform_ws_handshake(socket_t sock)
     log_printf(
         "ERROR: Could not send WebSocket handshake accept response: %s\n",
         xstrerror(error));
-    return false;
+    return error;
   }
 
-  return true;
+  return 0;
 }
 
 static int process_ws_request(socket_t sock)
 {
-  struct ws_client *client = NULL;
+  int error;
   struct sockaddr addr;
   socklen_t addr_len = sizeof(addr);
-  char ip_str[INET_ADDRSTRLEN] = {0};
-
-  if (!perform_ws_handshake(sock)) {
-    return -1;
-  }
-
-  if (getpeername(sock, &addr, &addr_len) == 0
-      && inet_ntop(addr.sa_family, &addr, ip_str, sizeof(ip_str)) != NULL) {
-    log_printf("WebSocket client connected: %s\n", ip_str);
-  } else {
-    log_printf("WebSocket client connected (unknown address)\n");
-  }
+  char ip_str[INET6_ADDRSTRLEN] = {0};
+  int i;
+  struct ws_client *client = NULL;
 
   mutex_lock(&ws_clients_mutex);
   {
-    for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+    for (i = 0; i < MAX_WS_CLIENTS; i++) {
+      if (ws_clients[i].connected && ws_clients[i].socket == sock) {
+        client = &ws_clients[i];
+        break;
+      }
+    }
+  }
+  mutex_unlock(&ws_clients_mutex);
+
+  if (client != NULL) {
+    /* Incoming request from a connected WebSocket client */
+    int opcode;
+    error = ws_recv(sock, &opcode, NULL, NULL, NULL);
+    if (error != 0) {
+      log_printf("ERROR: Could not receive WebSocket data from client %s: %s\n",
+          client->address_str,
+          xstrerror(xerrno));
+      return -1;
+    }
+    if (opcode == WS_OP_CLOSE) {
+      log_printf("Client disconnected: %s\n", client->address_str);
+      mutex_destroy(&client->mutex);
+      memset(client, 0, sizeof(*client));
+      return -1;
+    }
+    return 0;
+  }
+
+  error = perform_ws_handshake(sock);
+  if (error != 0) {
+    return error;
+  }
+
+  if (getpeername(sock, &addr, &addr_len) != 0
+      || inet_ntop(addr.sa_family, &addr, ip_str, sizeof(ip_str)) == NULL) {
+    strncpy(ip_str, "(unknown address)", sizeof(ip_str));
+  }
+
+  log_printf("Client connected: %s\n", ip_str);
+
+  mutex_lock(&ws_clients_mutex);
+  {
+    for (i = 0; i < MAX_WS_CLIENTS; i++) {
       if (!ws_clients[i].connected) {
         client = &ws_clients[i];
         client->connected = true;
         client->socket = sock;
         client->address = addr;
+        client->address_str[0] = '\0';
+        strncpy(client->address_str, ip_str, sizeof(client->address_str));
         mutex_create(&client->mutex);
         break;
       }
@@ -355,13 +395,13 @@ static int process_ws_request(socket_t sock)
   return 0;
 }
 
-static void process_ws_requests(void *arg)
+static void listen_ws_connections(void *arg)
 {
   UNUSED(arg);
 
   log_printf("Listening for WebSocket connections on port %d\n",
       LOGGER_PORT + 1);
-  start_server(
+  serve(
       LOGGER_PORT + 1,
       &ws_server_socket,
       &ws_server_active,
@@ -383,6 +423,9 @@ static int process_http_request(socket_t sock)
     log_printf("ERROR: Could not receive HTTP request headers: %s\n",
         xstrerror(xerrno));
     return xerrno;
+  }
+  if (len == 0) { /* EOF */
+    return -1;
   }
 
   if (http_parse_request_line(buf,
@@ -426,19 +469,19 @@ static int process_http_request(socket_t sock)
   return 0;
 }
 
-static void process_http_requests(void *arg)
+static void listen_http_connections(void *arg)
 {
   UNUSED(arg);
 
   log_printf("Listening for HTTP connections on port %d\n", LOGGER_PORT);
-  start_server(
+  serve(
       LOGGER_PORT,
       &http_server_socket,
       &http_server_active,
       process_http_request);
 }
 
-static void send_event_message(const struct mysql_event_general *event_general)
+static void enqueue_event_message(const struct mysql_event_general *event_general)
 {
   struct strbuf buf;
   bool ignore = false;
@@ -527,18 +570,35 @@ static void send_event_message(const struct mysql_event_general *event_general)
   ATOMIC_INCREMENT(&pending_message_count);
 }
 
-static void process_message(struct ws_message *message)
+static void broadcast_message(struct ws_message *message)
 {
-  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+  int i;
+
+  for (i = 0; i < MAX_WS_CLIENTS; i++) {
     struct ws_client *client = &ws_clients[i];
 
     mutex_lock(&client->mutex);
-    {
-      if (client->connected) {
-        ws_send_text(client->socket, message->message.str, WS_FLAG_FINAL, 0);
+
+    if (client->connected) {
+      int result = ws_send_text(client->socket,
+                                message->message.str,
+                                WS_FLAG_FINAL,
+                                0);
+      if (result <= 0) {
+        if (result == 0) {
+          log_printf("Client disconnected: %s\n", client->address_str);
+        } else {
+          log_printf("ERROR: Could not send message: %s\n", xstrerror(xerrno));
+        }
+        close_socket(client->socket);
+        mutex_destroy(&client->mutex);
+        memset(client, 0, sizeof(*client));
       }
     }
-    mutex_unlock(&client->mutex);
+
+    if (client->connected) {
+      mutex_unlock(&client->mutex);
+    }
   }
 
   ATOMIC_DECREMENT(&pending_message_count);
@@ -568,7 +628,7 @@ static void process_pending_messages(void *arg)
     }
     mutex_unlock(&message_queue_mutex);
 
-    process_message(message);
+    broadcast_message(message);
     free(message);
   }
 }
@@ -602,7 +662,7 @@ static int logger_plugin_init(void *arg)
 
   http_server_active = true;
   error = thread_create(
-      &http_server_thread, process_http_requests, NULL);
+      &http_server_thread, listen_http_connections, NULL);
   if (error != 0) {
     log_printf("Failed to create HTTP server thread: %s\n", xstrerror(error));
     return error;
@@ -610,7 +670,7 @@ static int logger_plugin_init(void *arg)
   thread_set_name(ws_server_thread, "logger_http_server_thread");
 
   ws_server_active = true;
-  error = thread_create(&ws_server_thread, process_ws_requests, NULL);
+  error = thread_create(&ws_server_thread, listen_ws_connections, NULL);
   if (error != 0) {
     log_printf("Failed to create WebSocket server thread: %s\n",
         xstrerror(error));
@@ -634,6 +694,8 @@ static int logger_plugin_init(void *arg)
 
 static int logger_plugin_deinit(void *arg)
 {
+  int i;
+
   UNUSED(arg);
 
   log_printf("Logger plugin is being deinitialized...\n");
@@ -667,21 +729,17 @@ static int logger_plugin_deinit(void *arg)
 
   mutex_lock(&ws_clients_mutex);
   {
-    for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+    for (i = 0; i < MAX_WS_CLIENTS; i++) {
       struct ws_client *client = &ws_clients[i];
 
       mutex_lock(&client->mutex);
-      mutex_t mutex = client->mutex;
-      {
-        if (client->connected) {
-          close_socket_nicely(client->socket);
-          client->socket = INVALID_SOCKET;
-          client->connected = false;
-          mutex_destroy(&client->mutex);
-        }
+      if (client->connected) {
+        close_socket_nicely(client->socket);
+        mutex_destroy(&client->mutex);
+        memset(client, 0, sizeof(*client));
+      } else {
+        mutex_unlock(&client->mutex);
       }
-      mutex_unlock(&mutex);
-      mutex_destroy(&mutex);
     }
   }
   mutex_unlock(&ws_clients_mutex);
@@ -711,7 +769,7 @@ static void logger_notify(MYSQL_THD thd,
       case MYSQL_AUDIT_GENERAL_LOG:
       case MYSQL_AUDIT_GENERAL_ERROR:
       case MYSQL_AUDIT_GENERAL_RESULT: {
-        send_event_message(event_general);
+        enqueue_event_message(event_general);
         break;
       }
     }

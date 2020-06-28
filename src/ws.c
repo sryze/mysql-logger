@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,6 +37,11 @@
 #define SHA1_HASH_SIZE 20
 #define PAYLOAD_LENGTH_16 126
 #define PAYLOAD_LENGTH_64 127
+
+#ifndef _WIN32
+  #define htonll(x) ((1==htonl(1)) ? (x) : ((uint64_t)htonl((x) & 0xFFFFFFFF) << 32) | htonl((x) >> 32))
+  #define ntohll(x) ((1==ntohl(1)) ? (x) : ((uint64_t)ntohl((x) & 0xFFFFFFFF) << 32) | ntohl((x) >> 32))
+#endif
 
 struct ws_http_handshake_state {
   bool has_upgrade_connection;
@@ -142,27 +148,6 @@ int ws_parse_connect_request(const char *buf,
   return 0;
 }
 
-static uint64_t ws_hton64(uint64_t x)
-{
-#ifdef _WIN32
-  return htonll(x);
-#else
-  union {
-    uint8_t bytes[8];
-    uint64_t n;
-  } v;
-  v.bytes[0] = (uint8_t)((x & 0xff) << 56);
-  v.bytes[1] = (uint8_t)((x & 0xff00) << 48);
-  v.bytes[2] = (uint8_t)((x & 0xff0000) << 40);
-  v.bytes[3] = (uint8_t)((x & 0xff000000) << 32);
-  v.bytes[4] = (uint8_t)((x & 0xff00000000) << 24);
-  v.bytes[5] = (uint8_t)((x & 0xff0000000000) << 16);
-  v.bytes[6] = (uint8_t)((x & 0xff000000000000) << 8);
-  v.bytes[7] = (uint8_t)(x & 0xff00000000000000);
-  return v.n;
-#endif
-}
-
 int ws_send_handshake_accept(socket_t sock, const char *key)
 {
   int error = 0;
@@ -261,7 +246,7 @@ static uint8_t *ws_alloc_frame(uint16_t flags,
         *(uint16_t *)(data + offset) = htons((uint16_t)payload_len);
         break;
       case sizeof(uint64_t):
-        *(uint64_t *)(data + offset) = ws_hton64(payload_len);
+        *(uint64_t *)(data + offset) = htonll(payload_len);
         break;
     }
     offset += payload_ext_len_size;
@@ -300,17 +285,102 @@ int ws_send(socket_t sock,
   return error;
 }
 
-int ws_send_text(socket_t sock,
-                 const char *text,
-                 uint16_t flags,
-                 uint32_t masking_key)
+int ws_send_text(
+    socket_t sock, const char *text, uint16_t flags, uint32_t masking_key)
 {
   return ws_send(sock, WS_OP_TEXT, text, strlen(text), flags, masking_key);
 }
 
-int ws_send_close(socket_t sock,
-                  uint16_t flags,
-                  uint32_t masking_key)
+int ws_send_close(
+    socket_t sock, uint16_t flags, uint32_t masking_key)
 {
   return ws_send(sock, WS_OP_CLOSE, NULL, 0, 0, 0);
+}
+
+int ws_recv(
+    socket_t sock, int *opcodep, bool *final, void **data, size_t *len)
+{
+  int error;
+  uint16_t header;
+  int opcode;
+  int fin;
+  int mask;
+  char *payload;
+  size_t payload_len = 0;
+  char masking_key[4];
+  size_t i;
+
+  error = recv_n(sock, (void *)&header, sizeof(header), NULL);
+  if (error <= 0) {
+    return error;
+  }
+
+  header = ntohs(header);
+  fin = (header & 0x8000) != 0;
+  opcode = (header & 0x0F00) >> 8;
+  mask = (header & 0x80) != 0;
+  payload_len = header & 0x7F; 
+
+  if (payload_len == PAYLOAD_LENGTH_16) {
+    uint16_t len;
+    error = recv_n(sock, (void *)&len, sizeof(len), NULL);
+    if (error <= 0) {
+      return error;
+    }
+    payload_len = ntohs(len);
+  } else if (payload_len == PAYLOAD_LENGTH_64) {
+    uint64_t len;
+    error = recv_n(sock, (void *)&len, sizeof(len), NULL);
+    if (error <= 0) {
+      return error;
+    }
+    payload_len = ntohll(len) & 0x7FFFFFFF; /* Clear MSB */
+  } else {
+    payload_len = payload_len;
+  }
+
+  if (mask) {
+    error = recv_n(sock, masking_key, sizeof(masking_key), NULL);
+    if (error <= 0) {
+      return error;
+    }
+  }
+
+  if (data != NULL && payload_len > 0) {
+    payload = malloc(payload_len);
+    if (payload == NULL) {
+      return errno;
+    }
+    error = recv_n(sock, payload, (int)payload_len, NULL);
+    if (error <= 0) {
+      free(payload);
+      return error;
+    }
+    if (mask) {
+      for (i = 0; i < payload_len; i++) {
+        payload[i] ^= masking_key[i % 4];
+      }
+    }
+    *data = payload;
+  } else {
+    char buf[1];
+    for (i = 0; i < payload_len; i++) {
+      error = recv(sock, buf, 1, 0);
+      if (error <= 0) {
+        return error;
+      }
+    }
+  }
+
+  if (len != NULL) {
+    *len = payload_len;
+  }
+
+  *opcodep = opcode;
+
+  if (final != NULL) {
+    *final = fin;
+  }
+
+  return 0;
 }

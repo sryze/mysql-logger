@@ -112,8 +112,8 @@ function createQueryInfo(query) {
     + '<br><br><b>User:</b><br>'
     + query.user
     + (
-      query.errorMesasge != null
-        ? '<br><br><b>Error Message:</b><br>' + query.errorMesasge
+      query.errorMessage != null
+        ? '<br><br><b>Error Message:</b><br>' + query.errorMessage
         : ''
     )
     + '<br><br><b>Started:</b><br>'
@@ -186,7 +186,7 @@ function onQueryEnd(event) {
     var query = queries[i];
     if (query.queryId == event.query_id) {
       query.executionTime = event.time - query.startTime;
-      query.errorMesasge = event.error_message;
+      query.errorMessage = event.error_message;
       query.status = success ? 'Success' : 'Error';
       addClass(table.rows[i + 1], success ? 'success' : 'error');
       if (query.isSelected) {
