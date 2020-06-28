@@ -15,8 +15,7 @@ Installation
 ------------
 
 1. Build with CMake
-2. Copy logger.so/dll/dylib to the plugins directory of your MySQL/MariaDB 
-   server
+2. Copy logger.so/.dll to the plugins directory of your MySQL/MariaDB server
 3. Register it:
 
 ```sql
