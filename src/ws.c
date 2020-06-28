@@ -298,7 +298,7 @@ int ws_send_close(
 }
 
 int ws_recv(
-    socket_t sock, int *opcodep, bool *final, void **data, size_t *len)
+    socket_t sock, int *opcodep, bool *finp, void **data, size_t *len)
 {
   int error;
   uint16_t header;
@@ -310,6 +310,9 @@ int ws_recv(
   char masking_key[4];
   size_t i;
 
+  assert(opcodep != NULL);
+  assert(data == NULL || len != NULL);
+
   error = recv_n(sock, (void *)&header, sizeof(header), NULL);
   if (error <= 0) {
     return error;
@@ -320,6 +323,11 @@ int ws_recv(
   opcode = (header & 0x0F00) >> 8;
   mask = (header & 0x80) != 0;
   payload_len = header & 0x7F; 
+
+  *opcodep = opcode;
+  if (finp != NULL) {
+    *finp = fin;
+  }
 
   if (payload_len == PAYLOAD_LENGTH_16) {
     uint16_t len;
@@ -335,8 +343,6 @@ int ws_recv(
       return error;
     }
     payload_len = ntohll(len) & 0x7FFFFFFF; /* Clear MSB */
-  } else {
-    payload_len = payload_len;
   }
 
   if (mask) {
@@ -346,22 +352,25 @@ int ws_recv(
     }
   }
 
-  if (data != NULL && payload_len > 0) {
-    payload = malloc(payload_len);
-    if (payload == NULL) {
-      return errno;
-    }
-    error = recv_n(sock, payload, (int)payload_len, NULL);
-    if (error <= 0) {
-      free(payload);
-      return error;
-    }
-    if (mask) {
-      for (i = 0; i < payload_len; i++) {
-        payload[i] ^= masking_key[i % 4];
+  if (data != NULL) {
+    if (payload_len > 0) {
+      payload = malloc(payload_len);
+      if (payload == NULL) {
+        return errno;
       }
+      error = recv_n(sock, payload, (int)payload_len, NULL);
+      if (error <= 0) {
+        free(payload);
+        return error;
+      }
+      if (mask) {
+        for (i = 0; i < payload_len; i++) {
+          payload[i] ^= masking_key[i % 4];
+        }
+      }
+      *data = payload;
     }
-    *data = payload;
+    *len = payload_len;
   } else {
     char buf[1];
     for (i = 0; i < payload_len; i++) {
@@ -370,16 +379,9 @@ int ws_recv(
         return error;
       }
     }
-  }
-
-  if (len != NULL) {
-    *len = payload_len;
-  }
-
-  *opcodep = opcode;
-
-  if (final != NULL) {
-    *final = fin;
+    if (len != NULL) {
+      *len = payload_len;
+    }
   }
 
   return 0;
