@@ -6,11 +6,14 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-echo "install: Copying files and restarting MySQL server"
-service mysql stop && \
-  cp -v logger.so $plugin_dir/ && \
-  chmod ag+r $plugin_dir/logger.so && \
-  service mysql start
+echo "install: Stopping MySQL server"
+service mysql stop || exit 1
+
+echo "install: Copying plugin to $plugin_dir"
+cp logger.so $plugin_dir/ && chmod ag+r $plugin_dir/logger.so || exit 1
+
+echo "install: Starting MySQL server"
+service mysql start || exit 1
 
 echo "install: Installing plugin"
 mysql -uroot -e "install plugin logger soname 'logger.so'"
