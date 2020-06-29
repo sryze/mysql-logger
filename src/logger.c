@@ -59,19 +59,19 @@
   #define LOGGER_PORT 13306
 #endif
 
+struct http_resource {
+  const char *path;
+  const char *content_type;
+  const char *data;
+  size_t size;
+};
+
 struct ws_client {
   mutex_t mutex;
   bool connected;
   socket_t socket;
   struct sockaddr address;
   char address_str[INET6_ADDRSTRLEN];
-};
-
-struct http_resource {
-  const char *path;
-  const char *content_type;
-  const char *data;
-  size_t size;
 };
 
 struct ws_message {
@@ -227,7 +227,7 @@ static void serve(unsigned short port,
     for (i = 0; i < (int)FD_SETSIZE; i++) {
       socket_t sock = (socket_t)i;
 #endif
-      if (FD_ISSET(sock, &fds)/* && i > max_fd*/) {
+      if (FD_ISSET(sock, &fds) && i > max_fd) {
         max_fd = (int)sock;
       }
     }
