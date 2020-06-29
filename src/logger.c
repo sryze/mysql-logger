@@ -160,16 +160,21 @@ static void serve(unsigned short port,
                   volatile bool *flag,
                   int (*handler)(socket_t))
 {
-  socket_t listen_sock;
+  socket_t server_sock;
   socket_t client_sock;
   struct sockaddr_in server_addr;
   struct sockaddr_in client_addr;
   socklen_t client_addr_len = sizeof(client_addr);
   int opt;
-  fd_set fds, ready_fds;
+  fd_set fds;
+  fd_set ready_fds;
+  int result;
+  struct timeval timeout;
+  int max_fd;
+  int i;
 
-  listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-  if (listen_sock < 0) {
+  server_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if (server_sock < 0) {
     log_printf("ERROR: Could not open socket: %s\n", xstrerror(xerrno));
     return;
   }
@@ -179,15 +184,15 @@ static void serve(unsigned short port,
    */
   opt = 1;
   setsockopt(
-      listen_sock, SOL_SOCKET, SO_REUSEADDR, (void *)&opt, sizeof(opt));
+      server_sock, SOL_SOCKET, SO_REUSEADDR, (void *)&opt, sizeof(opt));
 
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
   server_addr.sin_port = htons(port);
-  if (bind(listen_sock,
+  if (bind(server_sock,
            (struct sockaddr *)&server_addr,
            sizeof(server_addr)) != 0) {
-    close_socket(listen_sock);
+    close_socket(server_sock);
     log_printf(
         "ERROR: Could not bind to port %u: %s\n",
         port,
@@ -195,8 +200,8 @@ static void serve(unsigned short port,
     return;
   }
 
-  if (listen(listen_sock, 32) != 0) {
-    close_socket(listen_sock);
+  if (listen(server_sock, 32) != 0) {
+    close_socket(server_sock);
     log_printf(
         "ERROR: Could not start listening for connections: %s\n",
         xstrerror(xerrno));
@@ -205,21 +210,17 @@ static void serve(unsigned short port,
 
   assert(sock != NULL);
   assert(flag != NULL);
-  *sock = listen_sock;
+  *sock = server_sock;
 
   FD_ZERO(&fds);
-  FD_SET(listen_sock, &fds);
+  FD_SET(server_sock, &fds);
 
   while (*flag) {
-    int result;
-    struct timeval timeout;
-    int i;
-    int max_fd = -1;
-
     memcpy(&ready_fds, &fds, sizeof(fd_set));
     timeout.tv_sec = 0;
     timeout.tv_usec = 10000; /* 10 ms */
 
+    max_fd = -1;
 #ifdef _WIN32
     for (i = 0; i < (int)ready_fds.fd_count; i++) {
       socket_t sock = ready_fds.fd_array[i];
@@ -247,9 +248,9 @@ static void serve(unsigned short port,
       if (FD_ISSET(i, &ready_fds)) {
         socket_t sock = (socket_t)i;
 #endif
-        if (sock == listen_sock) {
+        if (sock == server_sock) {
           /* Server socket is ready to accept a new client connection */
-          client_sock = accept(listen_sock,
+          client_sock = accept(server_sock,
                                (struct sockaddr *)&client_addr,
                                &client_addr_len);
           if (client_sock < 0) {
@@ -302,7 +303,7 @@ static int perform_ws_handshake(socket_t sock)
 
   key_copy = strndup(key, key_len);
   if (key_copy == NULL) {
-    log_printf("ERROR: %s\n",xstrerror(errno));
+    log_printf("ERROR: %s\n", xstrerror(errno));
     http_send_internal_error(sock);
     return -1;
   }
