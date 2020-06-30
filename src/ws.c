@@ -55,6 +55,8 @@ static const char
   ws_key_accept_magic[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 static const char *ws_error_messages[] = {
+  "Out of memory",
+  "Send error",
   "Could not parse HTTP request",
   "Incorrect HTTP method in handshake request",
   "Unsupported version of HTTP protocol",
@@ -150,7 +152,6 @@ int ws_parse_connect_request(const char *buf,
 
 int ws_send_handshake_accept(socket_t sock, const char *key)
 {
-  int error = 0;
   size_t key_len;
   char *key_hash_input;
   SHA1Context sha1_context;
@@ -161,9 +162,9 @@ int ws_send_handshake_accept(socket_t sock, const char *key)
 
   key_len = strlen(key);
   key_hash_input = malloc(sizeof(*key_hash_input)
-   * (key_len + sizeof(ws_key_accept_magic)));
+     * (key_len + sizeof(ws_key_accept_magic)));
   if (key_hash_input == NULL) {
-    return errno;
+    return WS_ERROR_MEMORY;
   }
 
   memcpy(key_hash_input, key, key_len);
@@ -191,10 +192,10 @@ int ws_send_handshake_accept(socket_t sock, const char *key)
     "Sec-WebSocket-Accept: %s\r\n\r\n",
     accept);
   if (send_string(sock, response) < 0) {
-    return xerrno;
+    return WS_ERROR_SEND;
   }
 
-  return error;
+  return 0;
 }
 
 static uint8_t *ws_alloc_frame(uint16_t flags,
@@ -298,12 +299,15 @@ int ws_send_close(
 }
 
 int ws_recv(
-    socket_t sock, int *opcodep, bool *finp, void **data, size_t *len)
+    socket_t sock,
+    ws_opcode_t *opcodep,
+    int *flagsp,
+    void **data,
+    size_t *len)
 {
   int error;
   uint16_t header;
   int opcode;
-  int fin;
   int mask;
   char *payload;
   size_t payload_len = 0;
@@ -319,14 +323,14 @@ int ws_recv(
   }
 
   header = ntohs(header);
-  fin = (header & 0x8000) != 0;
   opcode = (header & 0x0F00) >> 8;
   mask = (header & 0x80) != 0;
   payload_len = header & 0x7F; 
 
   *opcodep = opcode;
-  if (finp != NULL) {
-    *finp = fin;
+
+  if (flagsp != NULL) {
+    *flagsp = header & 0xFF00;
   }
 
   if (payload_len == PAYLOAD_LENGTH_16) {

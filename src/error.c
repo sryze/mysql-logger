@@ -32,19 +32,15 @@
 
 static THREAD_LOCAL char static_error_buf[MAX_ERROR_LENGTH];
 
-const char *xstrerror(int error)
+const char *xstrerror(error_domain domain, int error)
 {
   char *buf = static_error_buf;
   size_t size = sizeof(static_error_buf);
 
 #ifdef _WIN32
 
-  if (error < WSABASEERR) {
-    /* C/POSIX error code */
-    strerror_s(buf, size, error);
-    return buf;
-  } else {
-    /* Windows Sockets error code */
+  if (domain == ERROR_SYSTEM) {
+    /* Win32 or WinSock error code */
     DWORD count;
     count = FormatMessageA(
         FORMAT_MESSAGE_FROM_SYSTEM,
@@ -64,132 +60,16 @@ const char *xstrerror(int error)
       buf[--count] = '\0';
     }
     return buf;
+  } else {
+    /* C/POSIX error code */
+    strerror_s(buf, size, error);
+    return buf;
   }
 
 #else /* _WIN32 */
 
   strerror_r(error, buf, size);
-  return static_error_buf;
+  return buf;
 
 #endif /* !_WIN32 */
-}
-
-int xerrno_get(void)
-{
-#ifdef _WIN32
-  int error = GetLastError();
-  /* Mapping of WSA error codes to POSIX errors codes */
-  switch (error) {
-    case WSAEINTR:
-      return EINTR;
-    case WSAEBADF:
-      return EBADF;
-    case WSAEACCES:
-      return EACCES;
-    case WSAEFAULT:
-      return EFAULT;
-    case WSAEINVAL:
-      return EINVAL;
-    case WSAEMFILE:
-      return EMFILE;
-    case WSAEWOULDBLOCK:
-      return EWOULDBLOCK;
-    case WSAEINPROGRESS:
-      return EINPROGRESS;
-    case WSAEALREADY:
-      return EALREADY;
-    case WSAENOTSOCK:
-      return ENOTSOCK;
-    case WSAEDESTADDRREQ:
-      return EDESTADDRREQ;
-    case WSAEMSGSIZE:
-      return EMSGSIZE;
-    case WSAEPROTOTYPE:
-      return EPROTOTYPE;
-    case WSAENOPROTOOPT:
-      return ENOPROTOOPT;
-    case WSAEPROTONOSUPPORT:
-      return EPROTONOSUPPORT;
-    /*
-    case WSAESOCKTNOSUPPORT:
-      return ESOCKTNOSUPPORT;
-    */
-    case WSAEOPNOTSUPP:
-      return EOPNOTSUPP;
-    /*
-    case WSAEPFNOSUPPORT:
-      return EPFNOSUPPORT;
-    */
-    case WSAEAFNOSUPPORT:
-      return EAFNOSUPPORT;
-    case WSAEADDRINUSE:
-      return EADDRINUSE;
-    case WSAEADDRNOTAVAIL:
-      return EADDRNOTAVAIL;
-    case WSAENETDOWN:
-      return ENETDOWN;
-    case WSAENETUNREACH:
-      return ENETUNREACH;
-    case WSAENETRESET:
-      return ENETRESET;
-    case WSAECONNABORTED:
-      return ECONNABORTED;
-    case WSAECONNRESET:
-      return ECONNRESET;
-    case WSAENOBUFS:
-      return ENOBUFS;
-    case WSAEISCONN:
-      return EISCONN;
-    case WSAENOTCONN:
-      return ENOTCONN;
-    /*
-    case WSAESHUTDOWN:
-      return ESHUTDOWN;
-    case WSAETOOMANYREFS:
-      return ETOOMANYREFS;
-    */
-    case WSAETIMEDOUT:
-      return ETIMEDOUT;
-    case WSAECONNREFUSED:
-      return ECONNREFUSED;
-    case WSAELOOP:
-      return ELOOP;
-    case WSAENAMETOOLONG:
-      return ENAMETOOLONG;
-    /*
-    case WSAEHOSTDOWN:
-      return EHOSTDOWN;
-    */
-    case WSAEHOSTUNREACH:
-      return EHOSTUNREACH;
-    case WSAENOTEMPTY:
-      return ENOTEMPTY;
-    /*
-    case WSAEPROCLIM:
-      return EPROCLIM;
-    case WSAEUSERS:
-      return EUSERS;
-    case WSAEDQUOT:
-      return EDQUOT;
-    case WSAESTALE:
-      return ESTALE;
-    case WSAEREMOTE:
-      return EREMOTE;
-    */
-    case WSAVERNOTSUPPORTED:
-      return WSAVERNOTSUPPORTED;
-    /*
-    case WSAEDISCON:
-      return EDISCON;
-    case WSAENOMORE:
-      return ENOMORE;
-    case WSAECANCELLED:
-      return ECANCELLED;
-    */
-    default:
-      return error;
-  }
-#else
-  return errno;
-#endif
 }

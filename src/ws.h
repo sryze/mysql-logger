@@ -28,23 +28,25 @@
 
 #define WS_PROTOCOL_VERSION 13
 
-enum {
-  WS_ERROR_HTTP_REQUEST = 1,
+typedef enum ws_error {
+  WS_ERROR_MEMORY,
+  WS_ERROR_SEND,
+  WS_ERROR_HTTP_REQUEST,
   WS_ERROR_HTTP_METHOD,
   WS_ERROR_HTTP_VERSION,
   WS_ERROR_WEBSOCKET_VERSION,
   WS_ERROR_NO_UPGRADE,
   WS_ERROR_NO_KEY
-};
+} ws_error_t;
 
-enum {
+typedef enum ws_opcode {
   WS_OP_CONTINUATION = 0,
   WS_OP_TEXT = 1,
   WS_OP_BINARY = 2,
   WS_OP_CLOSE = 8,
   WS_OP_PING = 9,
   WS_OP_PONG = 10
-};
+} ws_opcode_t;
 
 enum {
   WS_FLAG_FINAL = 1u << 15,
@@ -80,6 +82,10 @@ int ws_send_close(socket_t sock,
     uint32_t masking_key);
 
 int ws_recv(
-    socket_t sock, int *opcode, bool *final, void **data, size_t *len);
+    socket_t sock,
+    ws_opcode_t *opcode,
+    int *flags,
+    void **data,
+    size_t *len);
 
 #endif /* WS_H */

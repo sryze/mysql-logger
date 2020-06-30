@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 
+#include <errno.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -91,4 +92,133 @@ int send_string(socket_t sock, char *s)
     return -1;
   }
   return send_n(sock, s, (int)len);
+}
+
+int get_socket_error(void)
+{
+#ifdef _WIN32
+  return WSAGetLastError();
+#else
+  return errno;
+#endif
+}
+
+int get_socket_errno(void)
+{
+#ifdef _WIN32
+  int error = WSAGetLastError();
+  /* Mapping of WSA error codes to POSIX errors codes */
+  switch (error) {
+    case WSAEINTR:
+      return EINTR;
+    case WSAEBADF:
+      return EBADF;
+    case WSAEACCES:
+      return EACCES;
+    case WSAEFAULT:
+      return EFAULT;
+    case WSAEINVAL:
+      return EINVAL;
+    case WSAEMFILE:
+      return EMFILE;
+    case WSAEWOULDBLOCK:
+      return EWOULDBLOCK;
+    case WSAEINPROGRESS:
+      return EINPROGRESS;
+    case WSAEALREADY:
+      return EALREADY;
+    case WSAENOTSOCK:
+      return ENOTSOCK;
+    case WSAEDESTADDRREQ:
+      return EDESTADDRREQ;
+    case WSAEMSGSIZE:
+      return EMSGSIZE;
+    case WSAEPROTOTYPE:
+      return EPROTOTYPE;
+    case WSAENOPROTOOPT:
+      return ENOPROTOOPT;
+    case WSAEPROTONOSUPPORT:
+      return EPROTONOSUPPORT;
+    /*
+    case WSAESOCKTNOSUPPORT:
+      return ESOCKTNOSUPPORT;
+    */
+    case WSAEOPNOTSUPP:
+      return EOPNOTSUPP;
+    /*
+    case WSAEPFNOSUPPORT:
+      return EPFNOSUPPORT;
+    */
+    case WSAEAFNOSUPPORT:
+      return EAFNOSUPPORT;
+    case WSAEADDRINUSE:
+      return EADDRINUSE;
+    case WSAEADDRNOTAVAIL:
+      return EADDRNOTAVAIL;
+    case WSAENETDOWN:
+      return ENETDOWN;
+    case WSAENETUNREACH:
+      return ENETUNREACH;
+    case WSAENETRESET:
+      return ENETRESET;
+    case WSAECONNABORTED:
+      return ECONNABORTED;
+    case WSAECONNRESET:
+      return ECONNRESET;
+    case WSAENOBUFS:
+      return ENOBUFS;
+    case WSAEISCONN:
+      return EISCONN;
+    case WSAENOTCONN:
+      return ENOTCONN;
+    /*
+    case WSAESHUTDOWN:
+      return ESHUTDOWN;
+    case WSAETOOMANYREFS:
+      return ETOOMANYREFS;
+    */
+    case WSAETIMEDOUT:
+      return ETIMEDOUT;
+    case WSAECONNREFUSED:
+      return ECONNREFUSED;
+    case WSAELOOP:
+      return ELOOP;
+    case WSAENAMETOOLONG:
+      return ENAMETOOLONG;
+    /*
+    case WSAEHOSTDOWN:
+      return EHOSTDOWN;
+    */
+    case WSAEHOSTUNREACH:
+      return EHOSTUNREACH;
+    case WSAENOTEMPTY:
+      return ENOTEMPTY;
+    /*
+    case WSAEPROCLIM:
+      return EPROCLIM;
+    case WSAEUSERS:
+      return EUSERS;
+    case WSAEDQUOT:
+      return EDQUOT;
+    case WSAESTALE:
+      return ESTALE;
+    case WSAEREMOTE:
+      return EREMOTE;
+    */
+    case WSAVERNOTSUPPORTED:
+      return WSAVERNOTSUPPORTED;
+    /*
+    case WSAEDISCON:
+      return EDISCON;
+    case WSAENOMORE:
+      return ENOMORE;
+    case WSAECANCELLED:
+      return ECANCELLED;
+    */
+    default:
+      return -1;
+  }
+#else
+  return errno;
+#endif
 }

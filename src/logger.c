@@ -42,9 +42,6 @@
 #include "ui_index_css.h"
 #include "ui_index_js.h"
 #include "ws.h"
-#ifndef _WIN32
-  #include <arpa/inet.h>
-#endif
 
 #define UNUSED(x) (void)(x)
 #define MAX_HTTP_HEADERS (8 * 1024) /* HTTP RFC recommends at least 8000 */
@@ -175,7 +172,8 @@ static void serve(unsigned short port,
 
   server_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (server_sock < 0) {
-    log_printf("ERROR: Could not open socket: %s\n", xstrerror(xerrno));
+    log_printf("ERROR: Could not open socket: %s\n",
+        xstrerror(ERROR_SYSTEM, socket_error));
     return;
   }
 
@@ -196,7 +194,7 @@ static void serve(unsigned short port,
     log_printf(
         "ERROR: Could not bind to port %u: %s\n",
         port,
-        xstrerror(xerrno));
+        xstrerror(ERROR_SYSTEM, socket_error));
     return;
   }
 
@@ -204,7 +202,7 @@ static void serve(unsigned short port,
     close_socket(server_sock);
     log_printf(
         "ERROR: Could not start listening for connections: %s\n",
-        xstrerror(xerrno));
+        xstrerror(ERROR_SYSTEM, socket_error));
     return;
   }
 
@@ -235,7 +233,8 @@ static void serve(unsigned short port,
 
     result = select(max_fd + 1, &ready_fds, NULL, NULL, &timeout);
     if (result < 0) {
-      log_printf("ERROR: Socket monitoring failed: %s\n", xstrerror(xerrno));
+      log_printf("ERROR: Socket monitoring failed: %s\n",
+          xstrerror(ERROR_SYSTEM, socket_error));
       break;
     }
 
@@ -256,7 +255,7 @@ static void serve(unsigned short port,
           if (client_sock < 0) {
             log_printf(
                 "ERROR: Could not accept connection: %s\n",
-                xstrerror(xerrno));
+                xstrerror(ERROR_SYSTEM, socket_error));
           } else {
             FD_SET(client_sock, &fds);
           }
@@ -287,8 +286,8 @@ static int process_http_request(socket_t sock)
   len = http_recv_headers(sock, buf, sizeof(buf));
   if (len < 0) {
     log_printf("ERROR: Could not receive HTTP request headers: %s\n",
-        xstrerror(xerrno));
-    return xerrno;
+        xstrerror(ERROR_SYSTEM, socket_error));
+    return -1;
   }
   if (len == 0) { /* EOF */
     return -1;
@@ -359,7 +358,7 @@ static int perform_ws_handshake(socket_t sock)
   len = http_recv_headers(sock, buf, sizeof(buf));
   if (len < 0) {
     log_printf("ERROR: Could not receive HTTP request headers: %s\n",
-        xstrerror(xerrno));
+        xstrerror(ERROR_SYSTEM, socket_error));
     return -1;
   }
   if (len == 0) { /* EOF */
@@ -376,7 +375,7 @@ static int perform_ws_handshake(socket_t sock)
 
   key_copy = strndup(key, key_len);
   if (key_copy == NULL) {
-    log_printf("ERROR: %s\n", xstrerror(errno));
+    log_printf("ERROR: %s\n", xstrerror(ERROR_C, errno));
     http_send_internal_error(sock);
     return -1;
   }
@@ -386,7 +385,7 @@ static int perform_ws_handshake(socket_t sock)
   if (error != 0) {
     log_printf(
         "ERROR: Could not send WebSocket handshake accept response: %s\n",
-        xstrerror(error));
+        ws_error_message(error));
     return error;
   }
 
@@ -465,12 +464,12 @@ static int process_ws_request(socket_t sock)
 
   if (client != NULL) {
     /* Incoming request from a connected WebSocket client */
-    int opcode;
+    ws_opcode_t opcode;
     error = ws_recv(sock, &opcode, NULL, NULL, NULL);
     if (error != 0) {
       log_printf("ERROR: Could not receive WebSocket data from client %s: %s\n",
           client->address_str,
-          xstrerror(xerrno));
+          xstrerror(ERROR_SYSTEM, socket_error));
       return -1;
     }
     if (opcode == WS_OP_CLOSE) {
@@ -493,7 +492,8 @@ static int process_ws_request(socket_t sock)
       if (!ws_clients[i].connected) {
         client = &ws_clients[i];
         if ((error = init_ws_client(client, sock)) != 0) {
-          log_printf("Could not initialize client: %s\n", xstrerror(error));
+          log_printf("Could not initialize client: %s\n",
+              xstrerror(ERROR_SYSTEM, error));
           ws_send_close(sock, 0, 0);
           return -1;
         }
@@ -632,7 +632,8 @@ static void broadcast_message(struct ws_message *message)
         if (result == 0) {
           log_printf("Client disconnected: %s\n", client->address_str);
         } else {
-          log_printf("ERROR: Could not send message: %s\n", xstrerror(xerrno));
+          log_printf("ERROR: Could not send message: %s\n",
+              xstrerror(ERROR_SYSTEM, socket_error));
         }
         free_ws_client(client);
       }
@@ -684,13 +685,17 @@ static int logger_plugin_init(void *arg)
   }
 
   if (mutex_create(&log_mutex) != 0) {
-    fprintf(stderr, "Failed to create log mutex: %s\n", xstrerror(xerrno));
+    fprintf(
+        stderr,
+        "Failed to create log mutex: %s\n",
+        xstrerror(ERROR_SYSTEM, socket_error));
   } else {
     log_file = fopen("logger.log", "w");
     if (log_file == NULL) {
-      fprintf(stderr,
+      fprintf(
+          stderr,
           "Could not open log file for writing: %s\n",
-          xstrerror(errno));
+          xstrerror(ERROR_C, errno));
     }
   }
 
@@ -703,7 +708,8 @@ static int logger_plugin_init(void *arg)
   error = thread_create(
       &http_server_thread, listen_http_connections, NULL);
   if (error != 0) {
-    log_printf("Failed to create HTTP server thread: %s\n", xstrerror(error));
+    log_printf("Failed to create HTTP server thread: %s\n",
+        xstrerror(ERROR_SYSTEM, error));
     return error;
   }
   thread_set_name(ws_server_thread, "logger_http_server_thread");
@@ -712,7 +718,7 @@ static int logger_plugin_init(void *arg)
   error = thread_create(&ws_server_thread, listen_ws_connections, NULL);
   if (error != 0) {
     log_printf("Failed to create WebSocket server thread: %s\n",
-        xstrerror(error));
+        xstrerror(ERROR_SYSTEM, error));
     return error;
   }
   thread_set_name(ws_server_thread, "logger_ws_server_thread");
@@ -720,7 +726,8 @@ static int logger_plugin_init(void *arg)
   messaging_active = true;
   error = thread_create(&message_thread, process_pending_messages, NULL);
   if (error != 0) {
-    log_printf("Failed to create messaging thread: %s\n", xstrerror(error));
+    log_printf("Failed to create messaging thread: %s\n",
+        xstrerror(ERROR_SYSTEM, error));
     return error;
   }
   thread_set_name(message_thread, "logger_message_thread");

@@ -35,20 +35,27 @@
   #define close_socket closesocket
   #define ioctl_socket ioctlsocket
 #else
+  #include <netdb.h>
+  #include <unistd.h>
+  #include <arpa/inet.h>
   #include <sys/ioctl.h>
   #include <sys/select.h>
   #include <sys/socket.h>
   #include <sys/types.h>
-  #include <netdb.h>
-  #include <unistd.h>
   typedef int socket_t;
   #define close_socket close
   #define ioctl_socket ioctl
   #define INVALID_SOCKET -1
 #endif
 
+#define socket_error get_socket_error()
+#define socket_errno get_socket_errno()
+
 typedef int (*recv_handler_t)(
     const char *buf, int len, int chunk_offset, int chunk_len);
+
+int get_socket_error(void);
+int get_socket_errno(void);
 
 int close_socket_nicely(socket_t sock);
 

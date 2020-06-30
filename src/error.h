@@ -23,9 +23,11 @@
 #ifndef ERROR_H
 #define ERROR_H
 
-#define xerrno xerrno_get()
+typedef enum {
+  ERROR_C,
+  ERROR_SYSTEM
+} error_domain;
 
-int xerrno_get(void);
-const char *xstrerror(int error);
+const char *xstrerror(error_domain domain, int error);
 
 #endif /* ERROR_H */
