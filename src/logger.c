@@ -136,14 +136,12 @@ static void log_printf(const char *format, ...)
 
   mutex_lock(&log_mutex);
 
-#ifdef DEBUG
   va_start(args, format);
   printf("LOGGER: ");
   vprintf(format, args);
   va_end(args);
-#endif
 
-  if (log_file) {
+  if (log_file != NULL) {
     va_start(args, format);
     vfprintf(log_file, format, args);
     va_end(args);
