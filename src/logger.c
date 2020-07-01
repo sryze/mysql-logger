@@ -462,7 +462,7 @@ static int process_ws_request(socket_t sock)
 
   if (client != NULL) {
     /* Incoming request from a connected WebSocket client */
-    ws_opcode_t opcode;
+    int opcode;
     error = ws_recv(sock, &opcode, NULL, NULL, NULL);
     if (error != 0) {
       log_printf("ERROR: Could not receive WebSocket data from client %s: %s\n",

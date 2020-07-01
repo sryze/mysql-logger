@@ -39,14 +39,14 @@ typedef enum ws_error {
   WS_ERROR_NO_KEY
 } ws_error_t;
 
-typedef enum ws_opcode {
+enum {
   WS_OP_CONTINUATION = 0,
   WS_OP_TEXT = 1,
   WS_OP_BINARY = 2,
   WS_OP_CLOSE = 8,
   WS_OP_PING = 9,
   WS_OP_PONG = 10
-} ws_opcode_t;
+};
 
 enum {
   WS_FLAG_FINAL = 1u << 15,
@@ -58,13 +58,13 @@ enum {
 
 const char *ws_error_message(int error);
 
-int ws_parse_connect_request(
+ws_error_t ws_parse_connect_request(
     const char *buf,
     size_t len,
     const char **key,
     size_t *key_len);
+ws_error_t ws_send_handshake_accept(socket_t sock, const char *key);
 
-int ws_send_handshake_accept(socket_t sock, const char *key);
 int ws_send(
     socket_t sock,
     int opcode,
@@ -83,7 +83,7 @@ int ws_send_close(socket_t sock,
 
 int ws_recv(
     socket_t sock,
-    ws_opcode_t *opcode,
+    int *opcode,
     int *flags,
     void **data,
     size_t *len);

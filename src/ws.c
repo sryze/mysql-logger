@@ -110,10 +110,8 @@ static void on_handshake_header(const struct http_fragment *name,
   }
 }
 
-int ws_parse_connect_request(const char *buf,
-                             size_t len,
-                             const char **key,
-                             size_t *key_len)
+ws_error_t ws_parse_connect_request(
+    const char *buf, size_t len, const char **key, size_t *key_len)
 {
   struct ws_http_handshake_state parse_state = {0};
   const char *result;
@@ -150,7 +148,7 @@ int ws_parse_connect_request(const char *buf,
   return 0;
 }
 
-int ws_send_handshake_accept(socket_t sock, const char *key)
+ws_error_t ws_send_handshake_accept(socket_t sock, const char *key)
 {
   size_t key_len;
   char *key_hash_input;
@@ -300,8 +298,8 @@ int ws_send_close(
 
 int ws_recv(
     socket_t sock,
-    ws_opcode_t *opcodep,
-    int *flagsp,
+    int *out_opcode,
+    int *out_flags,
     void **data,
     size_t *len)
 {
@@ -314,7 +312,7 @@ int ws_recv(
   char masking_key[4];
   size_t i;
 
-  assert(opcodep != NULL);
+  assert(out_opcode != NULL);
   assert(data == NULL || len != NULL);
 
   error = recv_n(sock, (void *)&header, sizeof(header), NULL);
@@ -324,13 +322,13 @@ int ws_recv(
 
   header = ntohs(header);
   opcode = (header & 0x0F00) >> 8;
-  mask = (header & 0x80) != 0;
+  mask = (header & WS_FLAG_MASK) != 0;
   payload_len = header & 0x7F; 
 
-  *opcodep = opcode;
+  *out_opcode = opcode;
 
-  if (flagsp != NULL) {
-    *flagsp = header & 0xFF00;
+  if (out_flags != NULL) {
+    *out_flags = header & 0xFF00;
   }
 
   if (payload_len == PAYLOAD_LENGTH_16) {
