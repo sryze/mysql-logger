@@ -612,40 +612,10 @@ static void enqueue_event_message(const struct mysql_event_general *event_genera
   ATOMIC_INCREMENT(&pending_message_count);
 }
 
-static void broadcast_message(struct ws_message *message)
-{
-  int i;
-
-  for (i = 0; i < MAX_WS_CLIENTS; i++) {
-    struct ws_client *client = &ws_clients[i];
-
-    if (client->connected) {
-      mutex_lock(&client->mutex);
-
-      int result = ws_send_text(client->socket,
-                                message->message.str,
-                                WS_FLAG_FINAL,
-                                0);
-      if (result <= 0) {
-        if (result == 0) {
-          log_printf("Client disconnected: %s\n", client->address_str);
-        } else {
-          log_printf("ERROR: Could not send message: %s\n",
-              xstrerror(ERROR_SYSTEM, socket_error));
-        }
-        free_ws_client(client);
-      }
-
-      mutex_unlock(&client->mutex);
-    }
-  }
-
-  ATOMIC_DECREMENT(&pending_message_count);
-}
-
 static void process_pending_messages(void *arg)
 {
   struct ws_message *message;
+  int i;
 
   UNUSED(arg);
 
@@ -667,7 +637,33 @@ static void process_pending_messages(void *arg)
     }
     mutex_unlock(&message_queue_mutex);
 
-    broadcast_message(message);
+    for (i = 0; i < MAX_WS_CLIENTS; i++) {
+      struct ws_client *client = &ws_clients[i];
+
+      if (client->connected) {
+        mutex_lock(&client->mutex);
+
+        int result = ws_send_text(client->socket,
+                                  message->message.str,
+                                  WS_FLAG_FINAL,
+                                  0);
+        if (result <= 0) {
+          if (result == 0) {
+            log_printf("Client disconnected: %s\n", client->address_str);
+          } else {
+            log_printf("ERROR: Could not send message: %s\n",
+                xstrerror(ERROR_SYSTEM, socket_error));
+          }
+          free_ws_client(client);
+        }
+
+        mutex_unlock(&client->mutex);
+      }
+    }
+
+    ATOMIC_DECREMENT(&pending_message_count);
+
+    strbuf_free(&message->message);
     free(message);
   }
 }
@@ -762,6 +758,7 @@ static int logger_plugin_deinit(void *arg)
     while (message_queue != NULL) {
       struct ws_message *message = message_queue;
       message_queue = message->next;
+      strbuf_free(&message->message);
       free(message);
     }
     message_queue_tail = NULL;
