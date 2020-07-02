@@ -344,52 +344,6 @@ static void listen_http_connections(void *arg)
       process_http_request);
 }
 
-static int perform_ws_handshake(socket_t sock)
-{
-  char buf[MAX_HTTP_HEADERS] = {0};
-  int len;
-  int error;
-  const char *key;
-  size_t key_len;
-  char *key_copy;
-
-  len = http_recv_headers(sock, buf, sizeof(buf));
-  if (len < 0) {
-    log_printf("ERROR: Could not receive HTTP request headers: %s\n",
-        xstrerror(ERROR_SYSTEM, socket_error));
-    return -1;
-  }
-  if (len == 0) { /* EOF */
-    return -1;
-  }
-
-  error = ws_parse_connect_request(buf, (size_t)len, &key, &key_len);
-  if (error != 0) {
-    log_printf("ERROR: WebSocket handshake error: %s\n",
-        ws_error_message(error));
-    http_send_bad_request_error(sock);
-    return -1;
-  }
-
-  key_copy = strndup(key, key_len);
-  if (key_copy == NULL) {
-    log_printf("ERROR: %s\n", xstrerror(ERROR_C, errno));
-    http_send_internal_error(sock);
-    return -1;
-  }
-
-  error = ws_send_handshake_accept(sock, key_copy);
-  free(key_copy);
-  if (error != 0) {
-    log_printf(
-        "ERROR: Could not send WebSocket handshake accept response: %s\n",
-        ws_error_message(error));
-    return error;
-  }
-
-  return 0;
-}
-
 static int init_ws_client(struct ws_client *client, socket_t sock)
 {
   struct sockaddr addr;
@@ -478,7 +432,7 @@ static int process_ws_request(socket_t sock)
     return 0;
   }
 
-  error = perform_ws_handshake(sock);
+  error = ws_accept(sock);
   if (error != 0) {
     log_printf("WebSocket handshake failed\n");
     return -1;

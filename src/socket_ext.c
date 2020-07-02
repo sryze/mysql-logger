@@ -37,7 +37,7 @@ int close_socket_nicely(socket_t sock)
   return error;
 }
 
-int recv_n(socket_t sock, char *buf, int size, recv_handler_t handler)
+int recv_n(socket_t sock, char *buf, int size, int flags, recv_handler_t handler)
 {
   int len = 0;
   int recv_len;
@@ -46,7 +46,7 @@ int recv_n(socket_t sock, char *buf, int size, recv_handler_t handler)
     if (len >= size) {
       break;
     }
-    recv_len = recv(sock, buf + len, size - len, 0);
+    recv_len = recv(sock, buf + len, size - len, flags);
     if (recv_len <= 0) {
       return recv_len;
     }
@@ -62,7 +62,7 @@ int recv_n(socket_t sock, char *buf, int size, recv_handler_t handler)
   return len;
 }
 
-int send_n(socket_t sock, const char *buf, int size)
+int send_n(socket_t sock, const char *buf, int size, int flags)
 {
   int len = 0;
   int send_len;
@@ -71,7 +71,7 @@ int send_n(socket_t sock, const char *buf, int size)
     if (len >= size) {
       break;
     }
-    send_len = send(sock, buf + len, size - len, 0);
+    send_len = send(sock, buf + len, size - len, flags);
     if (send_len <= 0) {
       return send_len;
     }
@@ -91,7 +91,7 @@ int send_string(socket_t sock, char *s)
   if ((size_t)len > INT_MAX) {
     return -1;
   }
-  return send_n(sock, s, (int)len);
+  return send_n(sock, s, (int)len, 0);
 }
 
 int get_socket_error(void)

@@ -59,8 +59,9 @@ int get_socket_errno(void);
 
 int close_socket_nicely(socket_t sock);
 
-int recv_n(socket_t sock, char *buf, int size, recv_handler_t handler);
-int send_n(socket_t sock, const char *buf, int size);
+int recv_n(
+    socket_t sock, char *buf, int size, int flags, recv_handler_t handler);
+int send_n(socket_t sock, const char *buf, int size, int flags);
 int send_string(socket_t sock, char *s);
 
 #endif /* SOCKET_EXT_H */

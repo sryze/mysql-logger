@@ -28,16 +28,17 @@
 
 #define WS_PROTOCOL_VERSION 13
 
-typedef enum ws_error {
+enum {
   WS_ERROR_MEMORY,
   WS_ERROR_SEND,
+  WS_ERROR_RECV,
   WS_ERROR_HTTP_REQUEST,
   WS_ERROR_HTTP_METHOD,
   WS_ERROR_HTTP_VERSION,
   WS_ERROR_WEBSOCKET_VERSION,
   WS_ERROR_NO_UPGRADE,
   WS_ERROR_NO_KEY
-} ws_error_t;
+};
 
 enum {
   WS_OP_CONTINUATION = 0,
@@ -58,12 +59,7 @@ enum {
 
 const char *ws_error_message(int error);
 
-ws_error_t ws_parse_connect_request(
-    const char *buf,
-    size_t len,
-    const char **key,
-    size_t *key_len);
-ws_error_t ws_send_handshake_accept(socket_t sock, const char *key);
+int ws_accept(socket_t sock);
 
 int ws_send(
     socket_t sock,

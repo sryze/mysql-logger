@@ -34,6 +34,7 @@
 #include "ws.h"
 
 #define count_of(a) (sizeof(a) / sizeof(a[0]))
+#define MAX_HTTP_HEADERS (8 * 1024) /* HTTP RFC recommends at least 8000 */
 #define SHA1_HASH_SIZE 20
 #define PAYLOAD_LENGTH_16 126
 #define PAYLOAD_LENGTH_64 127
@@ -56,13 +57,14 @@ static const char
 
 static const char *ws_error_messages[] = {
   "Out of memory",
-  "Send error",
+  "Error sending data",
+  "Error receiving data",
   "Could not parse HTTP request",
   "Incorrect HTTP method in handshake request",
   "Unsupported version of HTTP protocol",
   "Unsupported version of WebSocket protocol",
-  "Request does not contain valid conneciton upgrade headers",
-  "Request does not contain 'Sec-WebSocket-Key' header"
+  "Request does not include valid conneciton upgrade headers",
+  "Request does not include \"Sec-WebSocket-Key\" header"
 };
 
 const char *ws_error_message(int error) {
@@ -110,7 +112,7 @@ static void on_handshake_header(const struct http_fragment *name,
   }
 }
 
-ws_error_t ws_parse_connect_request(
+static int ws_parse_connect_request(
     const char *buf, size_t len, const char **key, size_t *key_len)
 {
   struct ws_http_handshake_state parse_state = {0};
@@ -148,7 +150,7 @@ ws_error_t ws_parse_connect_request(
   return 0;
 }
 
-ws_error_t ws_send_handshake_accept(socket_t sock, const char *key)
+static int ws_send_handshake_accept(socket_t sock, const char *key)
 {
   size_t key_len;
   char *key_hash_input;
@@ -191,6 +193,39 @@ ws_error_t ws_send_handshake_accept(socket_t sock, const char *key)
     accept);
   if (send_string(sock, response) < 0) {
     return WS_ERROR_SEND;
+  }
+
+  return 0;
+}
+
+int ws_accept(socket_t sock)
+{
+  int error;
+  char buf[MAX_HTTP_HEADERS] = {0};
+  int len;
+  const char *key;
+  size_t key_len;
+  char *key_copy;
+
+  len = http_recv_headers(sock, buf, sizeof(buf));
+  if (len <= 0) {
+    return WS_ERROR_RECV;
+  }
+
+  error = ws_parse_connect_request(buf, (size_t)len, &key, &key_len);
+  if (error != 0) {
+    return error;
+  }
+
+  key_copy = strndup(key, key_len);
+  if (key_copy == NULL) {
+    return WS_ERROR_MEMORY;
+  }
+
+  error = ws_send_handshake_accept(sock, key_copy);
+  free(key_copy);
+  if (error != 0) {
+    return error;
   }
 
   return 0;
@@ -278,7 +313,7 @@ int ws_send(socket_t sock,
     return -1;
   }
 
-  error = send_n(sock, (const char *)frame, (int)frame_size);
+  error = send_n(sock, (const char *)frame, (int)frame_size, 0);
   free(frame);
 
   return error;
@@ -315,7 +350,7 @@ int ws_recv(
   assert(out_opcode != NULL);
   assert(data == NULL || len != NULL);
 
-  error = recv_n(sock, (void *)&header, sizeof(header), NULL);
+  error = recv_n(sock, (void *)&header, sizeof(header), 0, NULL);
   if (error <= 0) {
     return error;
   }
@@ -333,14 +368,14 @@ int ws_recv(
 
   if (payload_len == PAYLOAD_LENGTH_16) {
     uint16_t len;
-    error = recv_n(sock, (void *)&len, sizeof(len), NULL);
+    error = recv_n(sock, (void *)&len, sizeof(len), 0, NULL);
     if (error <= 0) {
       return error;
     }
     payload_len = ntohs(len);
   } else if (payload_len == PAYLOAD_LENGTH_64) {
     uint64_t len;
-    error = recv_n(sock, (void *)&len, sizeof(len), NULL);
+    error = recv_n(sock, (void *)&len, sizeof(len), 0, NULL);
     if (error <= 0) {
       return error;
     }
@@ -348,7 +383,7 @@ int ws_recv(
   }
 
   if (mask) {
-    error = recv_n(sock, masking_key, sizeof(masking_key), NULL);
+    error = recv_n(sock, masking_key, sizeof(masking_key), 0, NULL);
     if (error <= 0) {
       return error;
     }
@@ -360,7 +395,7 @@ int ws_recv(
       if (payload == NULL) {
         return errno;
       }
-      error = recv_n(sock, payload, (int)payload_len, NULL);
+      error = recv_n(sock, payload, (int)payload_len, 0, NULL);
       if (error <= 0) {
         free(payload);
         return error;

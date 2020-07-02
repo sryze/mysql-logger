@@ -196,7 +196,7 @@ static int on_headers(const char *buf,
 
 int http_recv_headers(socket_t sock, char *headers, size_t size)
 {
-  return recv_n(sock, headers, (int)size, on_headers);
+  return recv_n(sock, headers, (int)size, 0, on_headers);
 }
 
 int http_send_content(socket_t sock,
@@ -223,7 +223,7 @@ int http_send_content(socket_t sock,
     return result;
   }
 
-  return send_n(sock, content, (int)length);
+  return send_n(sock, content, (int)length, 0);
 }
 
 int http_send_ok(socket_t sock)
