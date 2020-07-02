@@ -76,9 +76,7 @@ struct ws_message {
   struct ws_message *next;
 };
 
-static bool loaded;
 static FILE *log_file;
-static mutex_t log_mutex;
 
 /* HTTP -> plugin */
 static volatile bool http_server_active;
@@ -134,8 +132,6 @@ static void log_printf(const char *format, ...)
 {
   va_list args;
 
-  mutex_lock(&log_mutex);
-
   va_start(args, format);
   printf("LOGGER: ");
   vprintf(format, args);
@@ -146,8 +142,6 @@ static void log_printf(const char *format, ...)
     vfprintf(log_file, format, args);
     va_end(args);
   }
-
-  mutex_unlock(&log_mutex);
 }
 
 static void serve(unsigned short port,
@@ -628,23 +622,12 @@ static int logger_plugin_init(void *arg)
 
   UNUSED(arg);
 
-  if (loaded) {
-    return 1;
-  }
-
-  if (mutex_create(&log_mutex) != 0) {
+  log_file = fopen("logger.log", "w");
+  if (log_file == NULL) {
     fprintf(
         stderr,
-        "Failed to create log mutex: %s\n",
-        xstrerror(ERROR_SYSTEM, socket_error));
-  } else {
-    log_file = fopen("logger.log", "w");
-    if (log_file == NULL) {
-      fprintf(
-          stderr,
-          "Could not open log file for writing: %s\n",
-          xstrerror(ERROR_C, errno));
-    }
+        "Could not open log file for writing: %s\n",
+        xstrerror(ERROR_C, errno));
   }
 
   log_printf("Logger plugin is initializing...\n");
@@ -681,7 +664,6 @@ static int logger_plugin_init(void *arg)
   thread_set_name(message_thread, "logger_message_thread");
 
   log_printf("Logger plugin started successfully\n");
-  loaded = true;
 
   return 0;
 }
@@ -693,7 +675,6 @@ static int logger_plugin_deinit(void *arg)
   UNUSED(arg);
 
   log_printf("Logger plugin is being deinitialized...\n");
-  loaded = false;
 
   http_server_active = false;
   thread_join(http_server_thread);
@@ -738,7 +719,6 @@ static int logger_plugin_deinit(void *arg)
   mutex_unlock(&ws_clients_mutex);
 
   mutex_destroy(&ws_clients_mutex);
-  mutex_destroy(&log_mutex);
   mutex_destroy(&message_queue_mutex);
 
   fclose(log_file);
@@ -750,10 +730,6 @@ static void logger_notify(MYSQL_THD thd,
                           unsigned int event_class,
                           const void *event)
 {
-  if (!loaded) {
-    return;
-  }
-
   if (event_class == MYSQL_AUDIT_GENERAL_CLASS) {
     const struct mysql_event_general *
         event_general = (const struct mysql_event_general *)event;
