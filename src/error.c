@@ -50,7 +50,7 @@ const char *xstrerror(error_domain domain, int error)
       error,
       MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
       buf,
-      size,
+      (DWORD)size,
       NULL);
     if (count == 0) {
       return "Unknown error";
