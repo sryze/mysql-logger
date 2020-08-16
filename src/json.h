@@ -30,6 +30,7 @@ int json_encode_bool(struct strbuf *json, bool value);
 int json_encode_integer(struct strbuf *json, long long value);
 int json_encode_double(struct strbuf *json, double value);
 int json_encode_string(struct strbuf *json, const char *str);
+
 int json_encode(struct strbuf *json, const char *format, ...);
 
 #endif /* JSON_H */

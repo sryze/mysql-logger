@@ -47,7 +47,7 @@ int read_config_file(const char *path, config_callback_t callback, void *arg)
     name_pos = value_pos = 0;
     name_len = value_len = 0;
 
-    /* skip to the name */
+    /* skip whitespace to the name */
     name_pos = ftell(file);
     while (isspace((c = fgetc(file))))
       name_pos++;
@@ -63,7 +63,7 @@ int read_config_file(const char *path, config_callback_t callback, void *arg)
       break;
     }
 
-    /* skip = and optional space around it */
+    /* skip '=' and optional whitespace around it */
     if (c != '=') {
       while (isspace((c = fgetc(file))) && c != '\n' && c != '=');
       if (c == EOF) {
@@ -75,7 +75,7 @@ int read_config_file(const char *path, config_callback_t callback, void *arg)
       assert(c == '=');
     }
 
-    /* skip to the value */
+    /* skip whitespace to the value */
     value_pos = ftell(file);
     while (isspace((c = fgetc(file))) && c != '\n');
       value_pos++;

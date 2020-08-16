@@ -25,6 +25,7 @@
 
 #include <stddef.h>
 
+#define UNUSED(x) (void)(x)
 #define COUNT_OF(a) (sizeof(a) / sizeof(a[0]))
 
 #ifdef _MSC_VER

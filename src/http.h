@@ -43,7 +43,9 @@ const char *http_parse_headers(
     const struct http_fragment *value,
     void *data),
   void *data);
+
 int http_recv_headers(socket_t sock, char *headers, size_t size);
+
 int http_send_content(
   socket_t sock,
   const char *content,

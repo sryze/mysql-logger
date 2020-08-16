@@ -26,74 +26,6 @@
 #include <string.h>
 #include "socket_ext.h"
 
-int close_socket_nicely(socket_t sock)
-{
-  int error;
-
-  error = shutdown(sock, SHUT_RDWR);
-  if (error == 0) {
-    return close_socket(sock);
-  }
-  return error;
-}
-
-int recv_n(socket_t sock, char *buf, int size, int flags, recv_handler_t handler)
-{
-  int len = 0;
-  int recv_len;
-
-  for (;;) {
-    if (len >= size) {
-      break;
-    }
-    recv_len = recv(sock, buf + len, size - len, flags);
-    if (recv_len <= 0) {
-      return recv_len;
-    }
-    if (recv_len == 0) {
-      break;
-    }
-    len += recv_len;
-    if (handler != NULL && handler(buf, len, len - recv_len, recv_len)) {
-      break;
-    }
-  }
-
-  return len;
-}
-
-int send_n(socket_t sock, const char *buf, int size, int flags)
-{
-  int len = 0;
-  int send_len;
-
-  for (;;) {
-    if (len >= size) {
-      break;
-    }
-    send_len = send(sock, buf + len, size - len, flags);
-    if (send_len <= 0) {
-      return send_len;
-    }
-    if (send_len == 0) {
-      break;
-    }
-    len += send_len;
-  }
-
-  return len;
-}
-
-int send_string(socket_t sock, char *s)
-{
-  size_t len = strlen(s);
-
-  if ((size_t)len > INT_MAX) {
-    return -1;
-  }
-  return send_n(sock, s, (int)len, 0);
-}
-
 int get_socket_error(void)
 {
 #ifdef _WIN32
@@ -221,4 +153,72 @@ int get_socket_errno(void)
 #else
   return errno;
 #endif
+}
+
+int recv_n(socket_t sock, char *buf, int size, int flags, recv_handler_t handler)
+{
+  int len = 0;
+  int recv_len;
+
+  for (;;) {
+    if (len >= size) {
+      break;
+    }
+    recv_len = recv(sock, buf + len, size - len, flags);
+    if (recv_len <= 0) {
+      return recv_len;
+    }
+    if (recv_len == 0) {
+      break;
+    }
+    len += recv_len;
+    if (handler != NULL && handler(buf, len, len - recv_len, recv_len)) {
+      break;
+    }
+  }
+
+  return len;
+}
+
+int send_n(socket_t sock, const char *buf, int size, int flags)
+{
+  int len = 0;
+  int send_len;
+
+  for (;;) {
+    if (len >= size) {
+      break;
+    }
+    send_len = send(sock, buf + len, size - len, flags);
+    if (send_len <= 0) {
+      return send_len;
+    }
+    if (send_len == 0) {
+      break;
+    }
+    len += send_len;
+  }
+
+  return len;
+}
+
+int send_string(socket_t sock, char *s)
+{
+  size_t len = strlen(s);
+
+  if ((size_t)len > INT_MAX) {
+    return -1;
+  }
+  return send_n(sock, s, (int)len, 0);
+}
+
+int close_socket_nicely(socket_t sock)
+{
+  int error;
+
+  error = shutdown(sock, SHUT_RDWR);
+  if (error == 0) {
+    return close_socket(sock);
+  }
+  return error;
 }

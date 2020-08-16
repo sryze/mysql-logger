@@ -56,16 +56,16 @@
 #define socket_errno get_socket_errno()
 
 typedef int (*recv_handler_t)(
-    const char *buf, int len, int chunk_offset, int chunk_len);
+  const char *buf, int len, int chunk_offset, int chunk_len);
 
 int get_socket_error(void);
 int get_socket_errno(void);
 
-int close_socket_nicely(socket_t sock);
-
 int recv_n(
-    socket_t sock, char *buf, int size, int flags, recv_handler_t handler);
+  socket_t sock, char *buf, int size, int flags, recv_handler_t handler);
 int send_n(socket_t sock, const char *buf, int size, int flags);
 int send_string(socket_t sock, char *s);
+
+int close_socket_nicely(socket_t sock);
 
 #endif /* SOCKET_EXT_H */

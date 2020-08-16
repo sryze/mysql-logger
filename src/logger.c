@@ -43,7 +43,6 @@
 #include "ui_index_js.h"
 #include "ws.h"
 
-#define UNUSED(x) (void)(x)
 #define MYSQL_PORT 3306
 #define MYSQL_LOGGER_PORT (MYSQL_PORT + 10000)
 #define MAX_HTTP_HEADERS (8 * 1024) /* HTTP RFC recommends at least 8000 */

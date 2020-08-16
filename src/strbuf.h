@@ -33,11 +33,15 @@ struct strbuf {
 
 int strbuf_alloc(struct strbuf *sb, size_t size);
 int strbuf_alloc_default(struct strbuf *sb);
+
 void strbuf_free(struct strbuf *sb);
+
 int strbuf_append(struct strbuf *sb, const char *str);
 int strbuf_appendn(struct strbuf *sb, const char *str, size_t len);
+
 int strbuf_insert(struct strbuf *sb, size_t pos, const char *str);
 int strbuf_insertn(struct strbuf *sb, size_t pos, const char *str, size_t len);
+
 int strbuf_delete(struct strbuf *sb, size_t start, size_t count);
 
 #endif /* STRBUF_H */
