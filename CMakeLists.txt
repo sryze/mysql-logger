@@ -121,6 +121,8 @@ include_directories(
 add_library(logger SHARED
   src/base64.c
   src/base64.h
+  src/config.c
+  src/config.h
   src/defs.h
   src/error.c
   src/error.h

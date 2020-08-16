@@ -62,26 +62,26 @@ const char *ws_error_message(int error);
 int ws_accept(socket_t sock);
 
 int ws_send(
-    socket_t sock,
-    int opcode,
-    const char *data,
-    size_t len,
-    uint32_t flags,
-    uint32_t masking_key);
+  socket_t sock,
+  int opcode,
+  const char *data,
+  size_t len,
+  uint32_t flags,
+  uint32_t masking_key);
 int ws_send_text(
-    socket_t sock,
-    const char *text,
-    uint16_t flags,
-    uint32_t masking_key);
+  socket_t sock,
+  const char *text,
+  uint16_t flags,
+  uint32_t masking_key);
 int ws_send_close(socket_t sock,
-    uint16_t flags,
-    uint32_t masking_key);
+  uint16_t flags,
+  uint32_t masking_key);
 
 int ws_recv(
-    socket_t sock,
-    int *opcode,
-    int *flags,
-    void **data,
-    size_t *len);
+  socket_t sock,
+  int *opcode,
+  int *flags,
+  void **data,
+  size_t *len);
 
 #endif /* WS_H */

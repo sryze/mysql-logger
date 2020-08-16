@@ -28,6 +28,7 @@
 #include <string.h>
 #include <mysql/plugin.h>
 #include <mysql/plugin_audit.h>
+#include "config.h"
 #include "defs.h"
 #include "error.h"
 #include "http.h"
@@ -53,10 +54,8 @@
 
 #define LOG(...) log_printf("[logger] ", __VA_ARGS__)
 #ifdef DEBUG
-  #define PORT 23306
   #define LOG_TRACE(...) log_printf("[logger:trace] ", __VA_ARGS__)
 #else
-  #define PORT 13306
   #define LOG_TRACE(...)
 #endif
 
@@ -82,6 +81,9 @@ struct ws_message {
 
 static mutex_t log_mutex;
 static FILE *log_file;
+
+static int config_http_port = 13306;
+static int config_ws_port = 13307;
 
 /* HTTP -> plugin */
 static volatile bool http_server_active;
@@ -154,6 +156,17 @@ static void log_printf(const char *prefix, const char *format, ...)
   mutex_unlock(&log_mutex);
 }
 
+static void on_config_var(const char *name, const char *value, void *arg)
+{
+  UNUSED(arg);
+
+  if (strcmp(name, "http_port") == 0) {
+    config_http_port = atoi(value);
+  } else if (strcmp(name, "ws_port") == 0) {
+    config_ws_port = atoi(value);
+  }
+}
+
 static void serve(unsigned short port,
                   socket_t *sock,
                   volatile bool *flag,
@@ -181,8 +194,7 @@ static void serve(unsigned short port,
    * Allow reuse of this socket address (port) without waiting.
    */
   opt = 1;
-  setsockopt(
-      server_sock, SOL_SOCKET, SO_REUSEADDR, (void *)&opt, sizeof(opt));
+  setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, (void *)&opt, sizeof(opt));
 
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
@@ -239,8 +251,8 @@ static void serve(unsigned short port,
     if ((server_pollfd->revents & POLLIN) != 0) {
       /* Server socket is ready to accept a new client connection */
       client_sock = accept(server_sock,
-                            (struct sockaddr *)&client_addr,
-                            &client_addr_len);
+                           (struct sockaddr *)&client_addr,
+                           &client_addr_len);
       if (client_sock < 0) {
         LOG("ERROR: Could not accept connection: %s\n",
             xstrerror(ERROR_SYSTEM, socket_error));
@@ -350,12 +362,11 @@ static void listen_http_connections(void *arg)
 {
   UNUSED(arg);
 
-  LOG("Listening for HTTP connections on port %d\n", PORT);
-  serve(
-      PORT,
-      &http_server_socket,
-      &http_server_active,
-      process_http_request);
+  LOG("Listening for HTTP connections on port %d\n", config_http_port);
+  serve(config_http_port,
+        &http_server_socket,
+        &http_server_active,
+        process_http_request);
 }
 
 static int init_ws_client(struct ws_client *client, socket_t sock)
@@ -479,16 +490,15 @@ static void listen_ws_connections(void *arg)
 {
   UNUSED(arg);
 
-  LOG("Listening for WebSocket connections on port %d\n",
-      PORT + 1);
+  LOG("Listening for WebSocket connections on port %d\n", config_ws_port);
   serve(
-      PORT + 1,
-      &ws_server_socket,
-      &ws_server_active,
-      process_ws_request);
+    config_ws_port,
+    &ws_server_socket,
+    &ws_server_active,
+    process_ws_request);
 }
 
-static void enqueue_event_message(const struct mysql_event_general *event_general)
+static void send_event(const struct mysql_event_general *event_general)
 {
   struct strbuf buf;
   bool ignore = false;
@@ -611,7 +621,7 @@ static void process_pending_messages(void *arg)
         int result;
 
         LOG_TRACE("Sending message %s to %s\n",
-            message->message.str, client->address_str);
+                  message->message.str, client->address_str);
         result = ws_send_text(client->socket,
                               message->message.str,
                               WS_FLAG_FINAL,
@@ -642,14 +652,15 @@ static int logger_plugin_init(void *arg)
 
   UNUSED(arg);
 
-  mutex_create(&log_mutex);
-  log_file = fopen("logger.log", "w");
+  read_config_file("logger.cnf", on_config_var, NULL);
 
+  mutex_create(&log_mutex);
+
+  log_file = fopen("logger.log", "w");
   if (log_file == NULL) {
-    fprintf(
-        stderr,
-        "Could not open log file for writing: %s\n",
-        xstrerror(ERROR_C, errno));
+    fprintf(stderr,
+            "Could not open log file for writing: %s\n",
+            xstrerror(ERROR_C, errno));
   }
 
   LOG("Logger plugin is initializing...\n");
@@ -658,8 +669,7 @@ static int logger_plugin_init(void *arg)
   mutex_create(&message_queue_mutex);
 
   http_server_active = true;
-  error = thread_create(
-      &http_server_thread, listen_http_connections, NULL);
+  error = thread_create(&http_server_thread, listen_http_connections, NULL);
   if (error != 0) {
     LOG("Failed to create HTTP server thread: %s\n",
         xstrerror(ERROR_SYSTEM, error));
@@ -760,7 +770,7 @@ static void logger_notify(MYSQL_THD thd,
       case MYSQL_AUDIT_GENERAL_LOG:
       case MYSQL_AUDIT_GENERAL_ERROR:
       case MYSQL_AUDIT_GENERAL_RESULT: {
-        enqueue_event_message(event_general);
+        send_event(event_general);
         break;
       }
     }

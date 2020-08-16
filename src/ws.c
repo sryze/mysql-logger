@@ -74,9 +74,10 @@ const char *ws_error_message(int error) {
   return ws_error_messages[error];
 }
 
-static void on_handshake_header(const struct http_fragment *name,
-                                const struct http_fragment *value,
-                                void *data)
+static void on_handshake_header(
+  const struct http_fragment *name,
+  const struct http_fragment *value,
+  void *data)
 {
   struct ws_http_handshake_state *state = data;
 
@@ -113,7 +114,10 @@ static void on_handshake_header(const struct http_fragment *name,
 }
 
 static int ws_parse_connect_request(
-    const char *buf, size_t len, const char **key, size_t *key_len)
+  const char *buf,
+  size_t len,
+  const char **key,
+  size_t *key_len)
 {
   struct ws_http_handshake_state parse_state = {0};
   const char *result;
@@ -231,12 +235,13 @@ int ws_accept(socket_t sock)
   return 0;
 }
 
-static uint8_t *ws_alloc_frame(uint16_t flags,
-                               uint8_t opcode,
-                               uint32_t masking_key,
-                               const char *payload,
-                               size_t payload_len,
-                               size_t *size)
+static uint8_t *ws_alloc_frame(
+  uint16_t flags,
+  uint8_t opcode,
+  uint32_t masking_key,
+  const char *payload,
+  size_t payload_len,
+  size_t *size)
 {
   uint8_t payload_len_high;
   uint8_t payload_ext_len_size;
@@ -296,12 +301,13 @@ static uint8_t *ws_alloc_frame(uint16_t flags,
   return data;
 }
 
-int ws_send(socket_t sock,
-            int opcode,
-            const char *data,
-            size_t len,
-            uint32_t flags,
-            uint32_t masking_key)
+int ws_send(
+  socket_t sock,
+  int opcode,
+  const char *data,
+  size_t len,
+  uint32_t flags,
+  uint32_t masking_key)
 {
   uint8_t *frame;
   size_t frame_size;
