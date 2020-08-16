@@ -43,21 +43,17 @@ const char *xstrerror(error_domain domain, int error)
     /* Win32 or WinSock error code */
     DWORD count;
     count = FormatMessageA(
-        FORMAT_MESSAGE_FROM_SYSTEM,
-        NULL,
-        error,
-        0,
-        buf,
-        (DWORD)size,
-        NULL);
+      FORMAT_MESSAGE_FROM_SYSTEM
+          | FORMAT_MESSAGE_IGNORE_INSERTS
+          | FORMAT_MESSAGE_MAX_WIDTH_MASK,
+      NULL,
+      error,
+      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+      buf,
+      size,
+      NULL);
     if (count == 0) {
       return "Unknown error";
-    }
-    /* Remove trailing newline and '.' characters (if any) */
-    while (buf[count - 1] == '\r'
-        || buf[count - 1] == '\n'
-        || buf[count - 1] == '.') {
-      buf[--count] = '\0';
     }
     return buf;
   } else {
