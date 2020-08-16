@@ -27,25 +27,29 @@
 #ifdef _WIN32
   #include <winsock2.h>
   #include <ws2tcpip.h>
-  typedef int socklen_t;
-  typedef SOCKET socket_t;
   #define SHUT_RD SD_RECEIVE
   #define SHUT_WR SD_SEND
   #define SHUT_RDWR SD_BOTH
   #define close_socket closesocket
   #define ioctl_socket ioctlsocket
+  #define poll WSAPoll
+  typedef int socklen_t;
+  typedef SOCKET socket_t;
+  typedef WSAPOLLFD pollfd_t;
 #else
-  #include <netdb.h>
   #include <unistd.h>
-  #include <arpa/inet.h>
+  #include <sys/types.h>
   #include <sys/ioctl.h>
   #include <sys/select.h>
   #include <sys/socket.h>
-  #include <sys/types.h>
-  typedef int socket_t;
+  #include <netdb.h>
+  #include <arpa/inet.h>
+  #include <poll.h>
   #define close_socket close
   #define ioctl_socket ioctl
   #define INVALID_SOCKET -1
+  typedef int socket_t;
+  typedef struct pollfd pollfd_t;
 #endif
 
 #define socket_error get_socket_error()

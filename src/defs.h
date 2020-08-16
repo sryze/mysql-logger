@@ -25,6 +25,8 @@
 
 #include <stddef.h>
 
+#define COUNT_OF(a) (sizeof(a) / sizeof(a[0]))
+
 #ifdef _MSC_VER
   typedef signed __int8 int8_t;
   typedef unsigned __int8 uint8_t;

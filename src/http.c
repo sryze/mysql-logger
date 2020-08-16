@@ -25,7 +25,6 @@
 #include "http.h"
 #include "string_ext.h"
 
-#define count_of(a) (sizeof(a) / sizeof(a[0]))
 #define CRLF "\r\n"
 #define IS_SPACE(c) ((c) == ' ')
 #define IS_HSPACE(c) ((c) == ' ' || (c) == '\t')
@@ -77,14 +76,14 @@ const char *http_parse_request_line(
     method->length = p - p_start;
   }
 
-  for (i = 0; i < count_of(http_methods); i++) {
+  for (i = 0; i < COUNT_OF(http_methods); i++) {
     if (strnstr(p_start,
                 http_methods[i],
                 p - p_start) != NULL) {
       break;
     }
   }
-  if (i == count_of(http_methods)) {
+  if (i == COUNT_OF(http_methods)) {
     return NULL;
   }
 

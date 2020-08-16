@@ -45,15 +45,19 @@
 
 #define UNUSED(x) (void)(x)
 #define MAX_HTTP_HEADERS (8 * 1024) /* HTTP RFC recommends at least 8000 */
+#define MAX_ACTIVE_CONNECTIONS 256
 #define MAX_WS_CLIENTS 32
 #define MAX_WS_MESSAGE_LEN 4096
 #define MAX_WS_MESSAGES 1024
 #define MAX_MESSAGE_QUEUE_SIZE 10240
 
+#define LOG(...) log_printf("[logger] ", __VA_ARGS__)
 #ifdef DEBUG
-  #define LOGGER_PORT 23306
+  #define PORT 23306
+  #define LOG_TRACE(...) log_printf("[logger:trace] ", __VA_ARGS__)
 #else
-  #define LOGGER_PORT 13306
+  #define PORT 13306
+  #define LOG_TRACE(...)
 #endif
 
 struct http_resource {
@@ -76,6 +80,7 @@ struct ws_message {
   struct ws_message *next;
 };
 
+static mutex_t log_mutex;
 static FILE *log_file;
 
 /* HTTP -> plugin */
@@ -128,20 +133,25 @@ static mutex_t message_queue_mutex;
   static volatile long query_id_counter = 1;
 #endif
 
-static void log_printf(const char *format, ...)
+static void log_printf(const char *prefix, const char *format, ...)
 {
   va_list args;
 
+  mutex_lock(&log_mutex);
+
+  printf(prefix);
   va_start(args, format);
-  printf("LOGGER: ");
   vprintf(format, args);
   va_end(args);
 
   if (log_file != NULL) {
+    fprintf(log_file, prefix);
     va_start(args, format);
     vfprintf(log_file, format, args);
     va_end(args);
   }
+
+  mutex_unlock(&log_mutex);
 }
 
 static void serve(unsigned short port,
@@ -155,16 +165,14 @@ static void serve(unsigned short port,
   struct sockaddr_in client_addr;
   socklen_t client_addr_len = sizeof(client_addr);
   int opt;
-  fd_set fds;
-  fd_set ready_fds;
   int result;
-  struct timeval timeout;
-  int max_fd;
   int i;
+  pollfd_t pollfds[MAX_ACTIVE_CONNECTIONS + 1];
+  pollfd_t *server_pollfd = &pollfds[MAX_ACTIVE_CONNECTIONS];
 
   server_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (server_sock < 0) {
-    log_printf("ERROR: Could not open socket: %s\n",
+    LOG("ERROR: Could not open socket: %s\n",
         xstrerror(ERROR_SYSTEM, socket_error));
     return;
   }
@@ -183,8 +191,7 @@ static void serve(unsigned short port,
            (struct sockaddr *)&server_addr,
            sizeof(server_addr)) != 0) {
     close_socket(server_sock);
-    log_printf(
-        "ERROR: Could not bind to port %u: %s\n",
+    LOG("ERROR: Could not bind to port %u: %s\n",
         port,
         xstrerror(ERROR_SYSTEM, socket_error));
     return;
@@ -192,8 +199,7 @@ static void serve(unsigned short port,
 
   if (listen(server_sock, 32) != 0) {
     close_socket(server_sock);
-    log_printf(
-        "ERROR: Could not start listening for connections: %s\n",
+    LOG("ERROR: Could not start listening for connections: %s\n",
         xstrerror(ERROR_SYSTEM, socket_error));
     return;
   }
@@ -202,64 +208,78 @@ static void serve(unsigned short port,
   assert(flag != NULL);
   *sock = server_sock;
 
-  FD_ZERO(&fds);
-  FD_SET(server_sock, &fds);
+  for (i = 0; i <= MAX_ACTIVE_CONNECTIONS; i++) {
+    pollfds[i].fd = -1;
+    pollfds[i].events = 0;
+    pollfds[i].revents = 0;
+  }
 
   while (*flag) {
-    memcpy(&ready_fds, &fds, sizeof(fd_set));
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 10000; /* 10 ms */
-
-    max_fd = -1;
-#ifdef _WIN32
-    for (i = 0; i < (int)ready_fds.fd_count; i++) {
-      socket_t sock = ready_fds.fd_array[i];
-#else
-    for (i = 0; i < (int)FD_SETSIZE; i++) {
-      socket_t sock = (socket_t)i;
-#endif
-      if (FD_ISSET(sock, &fds) && i > max_fd) {
-        max_fd = (int)sock;
-      }
+    for (i = 0; i < MAX_ACTIVE_CONNECTIONS; i++) {
+      pollfds[i].events = pollfds[i].fd != -1 ? POLLIN : 0;
+      pollfds[i].revents = 0;
     }
 
-    result = select(max_fd + 1, &ready_fds, NULL, NULL, &timeout);
+    /* Server's socket */
+    server_pollfd->fd = server_sock;
+    server_pollfd->events = POLLIN;
+    server_pollfd->revents = 0;
+
+    result = poll(pollfds, MAX_ACTIVE_CONNECTIONS + 1, 10);
     if (result < 0) {
-      log_printf("ERROR: Socket monitoring failed: %s\n",
+      LOG("ERROR: Socket polling failed: %s\n",
           xstrerror(ERROR_SYSTEM, socket_error));
       break;
     }
 
-#ifdef _WIN32
-    for (i = 0; i < (int)ready_fds.fd_count; i++) {
-      socket_t sock = ready_fds.fd_array[i];
-      {
-#else
-    for (i = 0; i < (int)FD_SETSIZE; i++) {
-      if (FD_ISSET(i, &ready_fds)) {
-        socket_t sock = (socket_t)i;
-#endif
-        if (sock == server_sock) {
-          /* Server socket is ready to accept a new client connection */
-          client_sock = accept(server_sock,
-                               (struct sockaddr *)&client_addr,
-                               &client_addr_len);
-          if (client_sock < 0) {
-            log_printf(
-                "ERROR: Could not accept connection: %s\n",
-                xstrerror(ERROR_SYSTEM, socket_error));
-          } else {
-            FD_SET(client_sock, &fds);
-          }
-        } else {
-          char buf[1];
-          /* One of the client sockets is ready to be read */
-          result = recv(sock, buf, sizeof(buf), MSG_PEEK);
-          if (result == 0 || handler(sock) != 0) {
-            close_socket(sock);
-            FD_CLR(sock, &fds);
-          }
+    if (result == 0) {
+      continue;
+    }
+
+    if ((server_pollfd->revents & POLLIN) != 0) {
+      /* Server socket is ready to accept a new client connection */
+      client_sock = accept(server_sock,
+                            (struct sockaddr *)&client_addr,
+                            &client_addr_len);
+      if (client_sock < 0) {
+        LOG("ERROR: Could not accept connection: %s\n",
+            xstrerror(ERROR_SYSTEM, socket_error));
+      }
+      for (i = 0; i < MAX_ACTIVE_CONNECTIONS; i++) {
+        if (pollfds[i].fd == -1) {
+          LOG_TRACE("Connection accepted: %d\n", i);
+          pollfds[i].fd = (int)client_sock;
+          break;
         }
+      }
+      if (i == MAX_ACTIVE_CONNECTIONS) {
+        LOG("ERROR: Reached connection limit\n");
+        continue;
+      }
+    }
+
+    for (i = 0; i < MAX_ACTIVE_CONNECTIONS; i++) {
+      if (pollfds[i].fd == -1) {
+        continue;
+      }
+
+      if ((pollfds[i].revents & POLLHUP) != 0
+            || (pollfds[i].revents & POLLERR) != 0) {
+        /* Client disconnected */
+        LOG_TRACE("Disconnected: %d\n", i);
+        close_socket(pollfds[i].fd);
+        pollfds[i].fd = -1;
+        continue;
+      }
+
+      if ((pollfds[i].revents & POLLIN) != 0) {
+        /* One of the client sockets is ready for reading */
+        if (handler(pollfds[i].fd) != 0) {
+          LOG_TRACE("Disconnected: %d\n", i);
+          close_socket(pollfds[i].fd);
+          pollfds[i].fd = -1;
+        }
+        continue;
       }
     }
   }
@@ -277,7 +297,7 @@ static int process_http_request(socket_t sock)
 
   len = http_recv_headers(sock, buf, sizeof(buf));
   if (len < 0) {
-    log_printf("ERROR: Could not receive HTTP request headers: %s\n",
+    LOG("ERROR: Could not receive HTTP request headers: %s\n",
         xstrerror(ERROR_SYSTEM, socket_error));
     return -1;
   }
@@ -289,12 +309,12 @@ static int process_http_request(socket_t sock)
                               &http_method,
                               &request_target,
                               &http_version) == NULL) {
-    log_printf("ERROR: Could not parse HTTP request\n");
+    LOG("ERROR: Could not parse HTTP request\n");
     return -1;
   }
 
   if (http_version > 0x01FF) {
-    log_printf("ERROR: Unsupported HTTP version %x\n", http_version);
+    LOG("ERROR: Unsupported HTTP version %x\n", http_version);
     http_send_bad_request_error(sock);
     return -1;
   }
@@ -330,9 +350,9 @@ static void listen_http_connections(void *arg)
 {
   UNUSED(arg);
 
-  log_printf("Listening for HTTP connections on port %d\n", LOGGER_PORT);
+  LOG("Listening for HTTP connections on port %d\n", PORT);
   serve(
-      LOGGER_PORT,
+      PORT,
       &http_server_socket,
       &http_server_active,
       process_http_request);
@@ -349,6 +369,7 @@ static int init_ws_client(struct ws_client *client, socket_t sock)
   if (error != 0
       || inet_ntop(addr.sa_family, &addr, ip_str, sizeof(ip_str)) == NULL) {
     strncpy(ip_str, "(unknown address)", sizeof(ip_str));
+    ip_str[sizeof(ip_str) - 1] = '\0';
   }
 
   error = mutex_create(&client->mutex);
@@ -361,8 +382,9 @@ static int init_ws_client(struct ws_client *client, socket_t sock)
   client->address = addr;
   client->address_str[0] = '\0';
   strncpy(client->address_str, ip_str, sizeof(client->address_str));
+  client->address_str[sizeof(client->address_str) - 1] = '\0';
 
-  log_printf("Client connected: %s\n", ip_str);
+  LOG("Client connected: %s\n", ip_str);
 
   return 0;
 }
@@ -370,11 +392,6 @@ static int init_ws_client(struct ws_client *client, socket_t sock)
 static int free_ws_client(struct ws_client *client)
 {
   int error;
-
-  error = mutex_unlock(&client->mutex);
-  if (error != 0) {
-    return error;
-  }
 
   error = mutex_destroy(&client->mutex);
   if (error != 0) {
@@ -413,13 +430,13 @@ static int process_ws_request(socket_t sock)
     int opcode;
     error = ws_recv(sock, &opcode, NULL, NULL, NULL);
     if (error != 0) {
-      log_printf("ERROR: Could not receive WebSocket data from client %s: %s\n",
+      LOG("ERROR: Could not receive WebSocket data from client %s: %s\n",
           client->address_str,
           xstrerror(ERROR_SYSTEM, socket_error));
       return -1;
     }
     if (opcode == WS_OP_CLOSE) {
-      log_printf("Client disconnected: %s\n", client->address_str);
+      LOG("Client disconnected: %s\n", client->address_str);
       free_ws_client(client);
       return -1;
     }
@@ -428,7 +445,7 @@ static int process_ws_request(socket_t sock)
 
   error = ws_accept(sock);
   if (error != 0) {
-    log_printf("WebSocket handshake failed\n");
+    LOG("WebSocket handshake failed\n");
     return -1;
   }
 
@@ -438,7 +455,7 @@ static int process_ws_request(socket_t sock)
       if (!ws_clients[i].connected) {
         client = &ws_clients[i];
         if ((error = init_ws_client(client, sock)) != 0) {
-          log_printf("Could not initialize client: %s\n",
+          LOG("Could not initialize client: %s\n",
               xstrerror(ERROR_SYSTEM, error));
           ws_send_close(sock, 0, 0);
           return -1;
@@ -450,7 +467,7 @@ static int process_ws_request(socket_t sock)
   mutex_unlock(&ws_clients_mutex);
 
   if (client == NULL) {
-    log_printf("Client limit reached, closing connection\n");
+    LOG("Client limit reached, closing connection\n");
     ws_send_close(sock, 0, 0);
     return -1;
   }
@@ -462,10 +479,10 @@ static void listen_ws_connections(void *arg)
 {
   UNUSED(arg);
 
-  log_printf("Listening for WebSocket connections on port %d\n",
-      LOGGER_PORT + 1);
+  LOG("Listening for WebSocket connections on port %d\n",
+      PORT + 1);
   serve(
-      LOGGER_PORT + 1,
+      PORT + 1,
       &ws_server_socket,
       &ws_server_active,
       process_ws_request);
@@ -497,18 +514,18 @@ static void enqueue_event_message(const struct mysql_event_general *event_genera
   switch (event_general->event_subclass) {
     case MYSQL_AUDIT_GENERAL_LOG:
       json_encode(&buf,
-        "\"type\": %s,", "query_start");
+        "\"type\": %s, ", "query_start");
       json_encode(&buf,
-        "\"user\": %s,", event_general->general_user);
+        "\"user\": %s, ", event_general->general_user);
       json_encode(&buf,
-        "\"query\": %s,", event_general->general_query);
+        "\"query\": %s, ", event_general->general_query);
       json_encode(&buf,
-        "\"time\": %L,", time_ms());
+        "\"time\": %L, ", time_ms());
       json_encode(&buf,
-        "\"rows\": %L,", event_general->general_rows);
+        "\"rows\": %L, ", event_general->general_rows);
 #if MYSQL_AUDIT_INTERFACE_VERSION >= 0x0302
       json_encode(&buf,
-        "\"query_id\": %L,", event_general->query_id);
+        "\"query_id\": %L, ", event_general->query_id);
       json_encode(&buf,
         "\"database\": %s", *(const char * const *)&event_general->database);
 #else
@@ -518,23 +535,23 @@ static void enqueue_event_message(const struct mysql_event_general *event_genera
       break;
     case MYSQL_AUDIT_GENERAL_ERROR:
       json_encode(&buf,
-        "\"type\": %s,", "query_error");
+        "\"type\": %s, ", "query_error");
       json_encode(&buf,
-        "\"query_id\": %L,", event_general->query_id);
+        "\"query_id\": %L, ", event_general->query_id);
       json_encode(&buf,
-        "\"time\": %L,", time_ms());
+        "\"time\": %L, ", time_ms());
       json_encode(&buf,
-        "\"error_code\": %i,", event_general->general_error_code);
+        "\"error_code\": %i, ", event_general->general_error_code);
       json_encode(&buf,
         "\"error_message\": %s", event_general->general_command);
       break;
     case MYSQL_AUDIT_GENERAL_RESULT:
       json_encode(&buf,
-        "\"type\": %s,", "query_result");
+        "\"type\": %s, ", "query_result");
       json_encode(&buf,
-        "\"query_id\": %L,", event_general->query_id);
+        "\"query_id\": %L, ", event_general->query_id);
       json_encode(&buf,
-        "\"time\": %L,", time_ms());
+        "\"time\": %L, ", time_ms());
       json_encode(&buf,
         "\"rows\": %L", event_general->general_rows);
       break;
@@ -588,23 +605,26 @@ static void process_pending_messages(void *arg)
     for (i = 0; i < MAX_WS_CLIENTS; i++) {
       struct ws_client *client = &ws_clients[i];
 
-      if (client->connected) {
-        mutex_lock(&client->mutex);
+      mutex_lock(&client->mutex);
 
-        int result = ws_send_text(client->socket,
-                                  message->message.str,
-                                  WS_FLAG_FINAL,
-                                  0);
+      if (client->connected) {
+        int result;
+
+        LOG_TRACE("Sending message %s to %s\n",
+            message->message.str, client->address_str);
+        result = ws_send_text(client->socket,
+                              message->message.str,
+                              WS_FLAG_FINAL,
+                              0);
         if (result <= 0) {
-          if (result == 0) {
-            log_printf("Client disconnected: %s\n", client->address_str);
-          } else {
-            log_printf("ERROR: Could not send message: %s\n",
-                xstrerror(ERROR_SYSTEM, socket_error));
-          }
+          LOG("ERROR: Failed to send message to %s: %s\n",
+              client->address_str,
+              xstrerror(ERROR_SYSTEM, socket_error));
           free_ws_client(client);
         }
+      }
 
+      if (client->mutex != NULL) {
         mutex_unlock(&client->mutex);
       }
     }
@@ -622,7 +642,9 @@ static int logger_plugin_init(void *arg)
 
   UNUSED(arg);
 
+  mutex_create(&log_mutex);
   log_file = fopen("logger.log", "w");
+
   if (log_file == NULL) {
     fprintf(
         stderr,
@@ -630,7 +652,7 @@ static int logger_plugin_init(void *arg)
         xstrerror(ERROR_C, errno));
   }
 
-  log_printf("Logger plugin is initializing...\n");
+  LOG("Logger plugin is initializing...\n");
 
   mutex_create(&ws_clients_mutex);
   mutex_create(&message_queue_mutex);
@@ -639,7 +661,7 @@ static int logger_plugin_init(void *arg)
   error = thread_create(
       &http_server_thread, listen_http_connections, NULL);
   if (error != 0) {
-    log_printf("Failed to create HTTP server thread: %s\n",
+    LOG("Failed to create HTTP server thread: %s\n",
         xstrerror(ERROR_SYSTEM, error));
     return error;
   }
@@ -648,7 +670,7 @@ static int logger_plugin_init(void *arg)
   ws_server_active = true;
   error = thread_create(&ws_server_thread, listen_ws_connections, NULL);
   if (error != 0) {
-    log_printf("Failed to create WebSocket server thread: %s\n",
+    LOG("Failed to create WebSocket server thread: %s\n",
         xstrerror(ERROR_SYSTEM, error));
     return error;
   }
@@ -657,13 +679,13 @@ static int logger_plugin_init(void *arg)
   messaging_active = true;
   error = thread_create(&message_thread, process_pending_messages, NULL);
   if (error != 0) {
-    log_printf("Failed to create messaging thread: %s\n",
+    LOG("Failed to create messaging thread: %s\n",
         xstrerror(ERROR_SYSTEM, error));
     return error;
   }
   thread_set_name(message_thread, "logger_message_thread");
 
-  log_printf("Logger plugin started successfully\n");
+  LOG("Logger plugin started successfully\n");
 
   return 0;
 }
@@ -674,7 +696,7 @@ static int logger_plugin_deinit(void *arg)
 
   UNUSED(arg);
 
-  log_printf("Logger plugin is being deinitialized...\n");
+  LOG("Logger plugin is being deinitialized...\n");
 
   http_server_active = false;
   thread_join(http_server_thread);
