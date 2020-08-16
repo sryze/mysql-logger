@@ -28,7 +28,6 @@
 #include <string.h>
 #include <mysql/plugin.h>
 #include <mysql/plugin_audit.h>
-#include "config.h"
 #include "defs.h"
 #include "error.h"
 #include "http.h"
@@ -45,6 +44,8 @@
 #include "ws.h"
 
 #define UNUSED(x) (void)(x)
+#define MYSQL_PORT 3306
+#define MYSQL_LOGGER_PORT (MYSQL_PORT + 10000)
 #define MAX_HTTP_HEADERS (8 * 1024) /* HTTP RFC recommends at least 8000 */
 #define MAX_ACTIVE_CONNECTIONS 256
 #define MAX_WS_CLIENTS 32
@@ -53,11 +54,11 @@
 #define MAX_MESSAGE_QUEUE_SIZE 10240
 
 #define LOG(...) log_printf("[logger] ", __VA_ARGS__)
-#ifdef DEBUG
-  #define LOG_TRACE(...) log_printf("[logger:trace] ", __VA_ARGS__)
-#else
-  #define LOG_TRACE(...)
-#endif
+#define LOG_TRACE(...) \
+  do {\
+    if (config_trace) \
+      log_printf("[logger:trace] ", __VA_ARGS__); \
+  } while (false)
 
 struct http_resource {
   const char *path;
@@ -82,8 +83,9 @@ struct ws_message {
 static mutex_t log_mutex;
 static FILE *log_file;
 
-static int config_http_port = 13306;
-static int config_ws_port = 13307;
+static int config_http_port;
+static int config_ws_port;
+static bool config_trace;
 
 /* HTTP -> plugin */
 static volatile bool http_server_active;
@@ -156,17 +158,6 @@ static void log_printf(const char *prefix, const char *format, ...)
   mutex_unlock(&log_mutex);
 }
 
-static void on_config_var(const char *name, const char *value, void *arg)
-{
-  UNUSED(arg);
-
-  if (strcmp(name, "http_port") == 0) {
-    config_http_port = atoi(value);
-  } else if (strcmp(name, "ws_port") == 0) {
-    config_ws_port = atoi(value);
-  }
-}
-
 static void serve(unsigned short port,
                   socket_t *sock,
                   volatile bool *flag,
@@ -221,14 +212,14 @@ static void serve(unsigned short port,
   *sock = server_sock;
 
   for (i = 0; i <= MAX_ACTIVE_CONNECTIONS; i++) {
-    pollfds[i].fd = -1;
+    pollfds[i].fd = INVALID_SOCKET;
     pollfds[i].events = 0;
     pollfds[i].revents = 0;
   }
 
   while (*flag) {
     for (i = 0; i < MAX_ACTIVE_CONNECTIONS; i++) {
-      pollfds[i].events = pollfds[i].fd != -1 ? POLLIN : 0;
+      pollfds[i].events = pollfds[i].fd != INVALID_SOCKET ? POLLIN : 0;
       pollfds[i].revents = 0;
     }
 
@@ -258,7 +249,7 @@ static void serve(unsigned short port,
             xstrerror(ERROR_SYSTEM, socket_error));
       }
       for (i = 0; i < MAX_ACTIVE_CONNECTIONS; i++) {
-        if (pollfds[i].fd == -1) {
+        if (pollfds[i].fd == INVALID_SOCKET) {
           LOG_TRACE("Connection accepted: %d\n", i);
           pollfds[i].fd = (int)client_sock;
           break;
@@ -271,7 +262,7 @@ static void serve(unsigned short port,
     }
 
     for (i = 0; i < MAX_ACTIVE_CONNECTIONS; i++) {
-      if (pollfds[i].fd == -1) {
+      if (pollfds[i].fd == INVALID_SOCKET) {
         continue;
       }
 
@@ -280,7 +271,7 @@ static void serve(unsigned short port,
         /* Client disconnected */
         LOG_TRACE("Disconnected: %d\n", i);
         close_socket(pollfds[i].fd);
-        pollfds[i].fd = -1;
+        pollfds[i].fd = INVALID_SOCKET;
         continue;
       }
 
@@ -289,7 +280,7 @@ static void serve(unsigned short port,
         if (handler(pollfds[i].fd) != 0) {
           LOG_TRACE("Disconnected: %d\n", i);
           close_socket(pollfds[i].fd);
-          pollfds[i].fd = -1;
+          pollfds[i].fd = INVALID_SOCKET;
         }
         continue;
       }
@@ -363,10 +354,11 @@ static void listen_http_connections(void *arg)
   UNUSED(arg);
 
   LOG("Listening for HTTP connections on port %d\n", config_http_port);
-  serve(config_http_port,
-        &http_server_socket,
-        &http_server_active,
-        process_http_request);
+  serve(
+    config_http_port,
+    &http_server_socket,
+    &http_server_active,
+    process_http_request);
 }
 
 static int init_ws_client(struct ws_client *client, socket_t sock)
@@ -652,8 +644,6 @@ static int logger_plugin_init(void *arg)
 
   UNUSED(arg);
 
-  read_config_file("logger.cnf", on_config_var, NULL);
-
   mutex_create(&log_mutex);
 
   log_file = fopen("logger.log", "w");
@@ -784,6 +774,25 @@ static struct st_mysql_audit logger_descriptor = {
   {MYSQL_AUDIT_GENERAL_CLASSMASK | MYSQL_AUDIT_TABLE_CLASSMASK}
 };
 
+static MYSQL_SYSVAR_INT(http_port, config_http_port,
+  PLUGIN_VAR_RQCMDARG, "Logger's HTTP server port (for the web UI)",
+  NULL, NULL, MYSQL_LOGGER_PORT, 1, 65536, 0);
+
+static MYSQL_SYSVAR_INT(ws_port, config_ws_port,
+  PLUGIN_VAR_RQCMDARG, "Port for WebSocket connections to logger",
+  NULL, NULL, MYSQL_LOGGER_PORT + 1, 1, 65536, 0);
+
+static MYSQL_SYSVAR_BOOL(trace, config_trace,
+  PLUGIN_VAR_RQCMDARG, "Enable verbose logging",
+  NULL, NULL, false);
+
+static struct st_mysql_sys_var *logger_sys_vars[] = {
+  MYSQL_SYSVAR(http_port),
+  MYSQL_SYSVAR(ws_port),
+  MYSQL_SYSVAR(trace),
+  NULL
+};
+
 mysql_declare_plugin(logger) {
   MYSQL_AUDIT_PLUGIN,         /* type                            */
   &logger_descriptor,         /* descriptor                      */
@@ -795,7 +804,7 @@ mysql_declare_plugin(logger) {
   logger_plugin_deinit,       /* deinit function (when unloaded) */
   0x0001,                     /* version                         */
   NULL,                       /* status variables                */
-  NULL,                       /* system variables                */
+  logger_sys_vars,            /* system variables                */
   NULL,
   MariaDB_PLUGIN_MATURITY_STABLE
 }
