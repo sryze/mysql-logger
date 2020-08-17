@@ -611,27 +611,27 @@ static void process_pending_messages(void *arg)
     for (i = 0; i < MAX_WS_CLIENTS; i++) {
       struct ws_client *client = &ws_clients[i];
 
-      mutex_lock(&client->mutex);
-
       if (client->connected) {
         int result;
 
-        LOG_TRACE("Sending message %s to %s\n",
-                  message->message.str, client->address_str);
-        result = ws_send_text(client->socket,
-                              message->message.str,
-                              WS_FLAG_FINAL,
-                              0);
-        if (result <= 0) {
-          LOG("Error: Failed to send message to %s: %s\n",
-              client->address_str,
-              xstrerror(ERROR_SYSTEM, socket_error));
-          free_ws_client(client);
+        mutex_lock(&client->mutex);
+        {
+          LOG_TRACE("Sending message %s to %s\n",
+                    message->message.str, client->address_str);
+          result = ws_send_text(client->socket,
+                                message->message.str,
+                                WS_FLAG_FINAL,
+                                0);
+          if (result <= 0) {
+            LOG("Error: Failed to send message to %s: %s\n",
+                client->address_str,
+                xstrerror(ERROR_SYSTEM, socket_error));
+            free_ws_client(client);
+          }
         }
-      }
-
-      if (client->mutex != NULL) {
-        mutex_unlock(&client->mutex);
+        if (client->mutex != NULL) {
+          mutex_unlock(&client->mutex);
+        }
       }
     }
 
@@ -731,12 +731,8 @@ static int logger_plugin_deinit(void *arg)
   {
     for (i = 0; i < MAX_WS_CLIENTS; i++) {
       struct ws_client *client = &ws_clients[i];
-
-      mutex_lock(&client->mutex);
       if (client->connected) {
         free_ws_client(client);
-      } else {
-        mutex_unlock(&client->mutex);
       }
     }
   }

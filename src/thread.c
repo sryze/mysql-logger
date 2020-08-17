@@ -83,7 +83,7 @@ int thread_create(thread_t *handle,
                          thread_data,
                          0,
                          NULL);
-  return GetLastError();
+  return *handle != NULL ? 0 : GetLastError();
 #else
   *handle = 0;
   return pthread_create(handle,
@@ -152,8 +152,19 @@ int thread_sleep(long ms)
 int mutex_create(mutex_t *mutex)
 {
 #ifdef _WIN32
-  *mutex = CreateMutex(NULL, FALSE, NULL);
-  return *mutex == NULL ? GetLastError() : 0;
+  #ifdef USE_LIGHTWEIGHT_MUTEXES
+    LPCRITICAL_SECTION cs =
+      HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(CRITICAL_SECTION));
+    if (cs == NULL) {
+      return ERROR_NOT_ENOUGH_MEMORY;
+    }
+    InitializeCriticalSection(cs);
+    *mutex = cs;
+    return 0;
+  #else
+    *mutex = CreateMutex(NULL, FALSE, NULL);
+    return *mutex == NULL ? GetLastError() : 0;
+  #endif
 #else
   return pthread_mutex_init(mutex, NULL);
 #endif
@@ -162,8 +173,13 @@ int mutex_create(mutex_t *mutex)
 int mutex_lock(mutex_t *mutex)
 {
 #ifdef _WIN32
-  return WaitForSingleObjectEx(*mutex, INFINITE, FALSE)
+  #ifdef USE_LIGHTWEIGHT_MUTEXES
+    EnterCriticalSection(*mutex);
+    return 0;
+  #else
+    return WaitForSingleObjectEx(*mutex, INFINITE, FALSE)
       == WAIT_FAILED ? GetLastError() : 0;
+  #endif
 #else
   return pthread_mutex_lock(mutex);
 #endif
@@ -172,7 +188,12 @@ int mutex_lock(mutex_t *mutex)
 int mutex_unlock(mutex_t *mutex)
 {
 #ifdef _WIN32
-  return ReleaseMutex(*mutex) ? 0 : GetLastError();
+  #ifdef USE_LIGHTWEIGHT_MUTEXES
+    LeaveCriticalSection(*mutex);
+    return 0;
+  #else
+    return ReleaseMutex(*mutex) ? 0 : GetLastError();
+  #endif
 #else
   return pthread_mutex_unlock(mutex);
 #endif
@@ -181,7 +202,13 @@ int mutex_unlock(mutex_t *mutex)
 int mutex_destroy(mutex_t *mutex)
 {
 #ifdef _WIN32
-  return CloseHandle(*mutex) ? 0 : GetLastError();
+  #ifdef USE_LIGHTWEIGHT_MUTEXES
+    LPCRITICAL_SECTION cs = *mutex;
+    DeleteCriticalSection(cs);
+    return HeapFree(GetProcessHeap(), 0, cs) ? 0 : GetLastError();
+  #else
+    return CloseHandle(*mutex) ? 0 : GetLastError();
+  #endif
 #else
   return pthread_mutex_destroy(mutex);
 #endif
