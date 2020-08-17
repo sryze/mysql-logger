@@ -563,19 +563,23 @@ static void send_event(const struct mysql_event_general *event_general)
   mutex_lock(&message_queue_mutex);
   {
     struct ws_message *message = malloc(sizeof(*message));
-    message->message = buf;
-    message->next = NULL;
-    if (message_queue_tail != NULL) {
-      message_queue_tail->next = message;
-    }
-    message_queue_tail = message;
-    if (message_queue == NULL) {
-      message_queue = message;
+    if (message != NULL) {
+      message->message = buf;
+      message->next = NULL;
+      if (message_queue_tail != NULL) {
+        message_queue_tail->next = message;
+      }
+      message_queue_tail = message;
+      if (message_queue == NULL) {
+        message_queue = message;
+      }
+      pending_message_count++;
+    } else {
+      LOG("Error: Failed to allocate memory for message: %s\n",
+          xstrerror(ERROR_SYSTEM, errno));
     }
   }
   mutex_unlock(&message_queue_mutex);
-
-  ATOMIC_INCREMENT(&pending_message_count);
 }
 
 static void process_pending_messages(void *arg)
@@ -600,6 +604,7 @@ static void process_pending_messages(void *arg)
       if (message_queue_tail == message) {
         message_queue_tail = NULL; /* last message */
       }
+      pending_message_count--;
     }
     mutex_unlock(&message_queue_mutex);
 
@@ -618,7 +623,7 @@ static void process_pending_messages(void *arg)
                               WS_FLAG_FINAL,
                               0);
         if (result <= 0) {
-          LOG("ERROR: Failed to send message to %s: %s\n",
+          LOG("Error: Failed to send message to %s: %s\n",
               client->address_str,
               xstrerror(ERROR_SYSTEM, socket_error));
           free_ws_client(client);
@@ -629,8 +634,6 @@ static void process_pending_messages(void *arg)
         mutex_unlock(&client->mutex);
       }
     }
-
-    ATOMIC_DECREMENT(&pending_message_count);
 
     strbuf_free(&message->message);
     free(message);
