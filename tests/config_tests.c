@@ -28,18 +28,38 @@ static void config_callback(const char *name, const char *value, void *arg)
   }
 }
 
-void test_config_parsing(void)
+void test_read_config(void)
+{
+  struct config_data data = { NULL, NULL };
+  int result;
+
+  result = read_config("foo = 1\n\nbar = hello world   \n",
+                       config_callback,
+                       &data);
+
+  TEST(result == 0);
+  TEST(strcmp(data.foo, "1") == 0);
+  TEST(strcmp(data.bar, "hello world") == 0);
+}
+
+
+void test_read_config_file(void)
 {
   struct config_data data = {NULL, NULL};
+  char *name;
+  FILE *file;
+  int result;
 
-  char *name = tmpnam(NULL);
-  FILE *file = fopen(name, "w");
+  name = tmpnam(NULL);
+  file = fopen(name, "w");
+
   fputs("foo = 1\n\n", file);
   fputs("bar = hello world   \n", file);
   fclose(file);
 
-  read_config_file(name, config_callback, &data);
+  result = read_config_file(name, config_callback, &data);
 
+  TEST(result == 0);
   TEST(strcmp(data.foo, "1") == 0);
   TEST(strcmp(data.bar, "hello world") == 0);
 }

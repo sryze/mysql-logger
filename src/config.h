@@ -28,6 +28,7 @@
 typedef void (*config_callback_t)(
   const char *name, const char *value, void *arg);
 
+int read_config(const char *str, config_callback_t callback, void *arg);
 int read_config_file(const char *path, config_callback_t callback, void *arg);
 
 #endif /* CONFIG_H */

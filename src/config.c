@@ -25,32 +25,32 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include "config.h"
 #include "strbuf.h"
 
-int read_config_file(const char *path, config_callback_t callback, void *arg)
+int read_config(const char *str, config_callback_t callback, void *arg)
 {
-  FILE *file;
+  size_t i;
+  size_t len;
   char c;
-  long name_pos, value_pos;
+  size_t name_pos, value_pos;
   size_t name_len, value_len;
   char *name, *value;
 
-  assert(path != NULL);
+  assert(str != NULL);
   assert(callback != NULL);
 
-  file = fopen(path, "rb");
-  if (file == NULL) {
-    return errno;
-  }
+  len = strlen(str);
 
-  do {
+  for (i = 0; i < len; ) {
     name_pos = value_pos = 0;
     name_len = value_len = 0;
 
     /* skip whitespace to the name */
-    name_pos = ftell(file);
-    while (isspace((c = fgetc(file)))) {
+    name_pos = i;
+    while (i < len && isspace((c = str[i++]))) {
       name_pos++;
     }
     if (c == EOF) {
@@ -58,8 +58,8 @@ int read_config_file(const char *path, config_callback_t callback, void *arg)
     }
 
     /* read name in */
-    fseek(file, -1, SEEK_CUR);
-    while (!isspace((c = fgetc(file))) && c != '=') {
+    i--;
+    while (i < len && !isspace((c = str[i++])) && c != '=') {
       name_len++;
     }
     if (c == EOF) {
@@ -68,7 +68,7 @@ int read_config_file(const char *path, config_callback_t callback, void *arg)
 
     /* skip '=' and optional whitespace around it */
     if (c != '=') {
-      while (isspace((c = fgetc(file))) && c != '\n' && c != '=');
+      while (i < len && isspace((c = str[i++])) && c != '\n' && c != '=');
       if (c == EOF) {
         break;
       }
@@ -79,8 +79,8 @@ int read_config_file(const char *path, config_callback_t callback, void *arg)
     }
 
     /* skip whitespace to the value */
-    value_pos = ftell(file);
-    while (isspace((c = fgetc(file))) && c != '\n') {
+    value_pos = i;
+    while (i < len && isspace((c = str[i++])) && c != '\n') {
       value_pos++;
     }
     if (c == EOF) {
@@ -91,30 +91,26 @@ int read_config_file(const char *path, config_callback_t callback, void *arg)
     }
 
     /* read value in */
-    fseek(file, -1, SEEK_CUR);
-    while ((c = fgetc(file)) != EOF && c != '\r' && c != '\n') {
+    i--;
+    while (i < len && (c = str[i++]) != EOF && c != '\r' && c != '\n') {
       value_len++;
     }
 
     name = malloc(name_len + 1);
     if (name == NULL) {
-      fclose(file);
       return errno;
     }
 
-    (void)fseek(file, name_pos, SEEK_SET);
-    (void)fread(name, 1, name_len, file);
+    memcpy(name, str + name_pos, name_len);
     name[name_len] = '\0';
 
     value = malloc(value_len + 1);
     if (value == NULL) {
       free(name);
-      fclose(file);
       return errno;
     }
 
-    (void)fseek(file, value_pos, SEEK_SET);
-    (void)fread(value, 1, value_len, file);
+    memcpy(value, str + value_pos, value_len);
     value[value_len] = '\0';
 
     /* trim trailing whitespace */
@@ -127,9 +123,52 @@ int read_config_file(const char *path, config_callback_t callback, void *arg)
     free(name);
     free(value);
   }
-  while (c != EOF);
-
-  fclose(file);
 
   return 0;
+}
+
+int read_config_file(const char *path, config_callback_t callback, void *arg)
+{
+  FILE *file;
+  size_t len;
+  size_t count;
+  char *buf;
+  int result;
+
+  assert(path != NULL);
+  assert(callback != NULL);
+
+  file = fopen(path, "rb");
+  if (file == NULL) {
+    return errno;
+  }
+
+  fseek(file, 0, SEEK_END);
+  len = (size_t)ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  if (len == 0) {
+    fclose(file);
+    return 0;
+  }
+
+  buf = malloc(len + 1);
+  if (buf == NULL) {
+    fclose(file);
+    return errno;
+  }
+
+  count = fread(buf, 1, len, file);
+  if (count < len) {
+    free(buf);
+    fclose(file);
+    return errno;
+  }
+
+  buf[len] = '\0';
+  result = read_config(buf, callback, arg);
+  free(buf);
+  fclose(file);
+
+  return result;
 }

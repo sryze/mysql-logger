@@ -84,7 +84,7 @@ static FILE *log_file;
 
 static int config_http_port;
 static int config_ws_port;
-static bool config_trace;
+static char config_trace;
 
 /* HTTP -> plugin */
 static volatile bool http_server_active;

@@ -7,8 +7,6 @@
 
 int main(void)
 {
-  test_config_parsing();
-
   test_strbuf_alloc_free();
   test_strbuf_append();
   test_strbuf_insert();
@@ -21,6 +19,9 @@ int main(void)
 
   test_http_request_line_parsing();
   test_http_header_parsing();
+
+  test_read_config();
+  test_read_config_file();
 
   puts("OK");
 }
