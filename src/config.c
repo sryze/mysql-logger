@@ -50,16 +50,18 @@ int read_config_file(const char *path, config_callback_t callback, void *arg)
 
     /* skip whitespace to the name */
     name_pos = ftell(file);
-    while (isspace((c = fgetc(file))))
+    while (isspace((c = fgetc(file)))) {
       name_pos++;
+    }
     if (c == EOF) {
       break;
     }
 
     /* read name in */
     fseek(file, -1, SEEK_CUR);
-    while (!isspace((c = fgetc(file))) && c != '=')
+    while (!isspace((c = fgetc(file))) && c != '=') {
       name_len++;
+    }
     if (c == EOF) {
       break;
     }
@@ -78,8 +80,9 @@ int read_config_file(const char *path, config_callback_t callback, void *arg)
 
     /* skip whitespace to the value */
     value_pos = ftell(file);
-    while (isspace((c = fgetc(file))) && c != '\n');
+    while (isspace((c = fgetc(file))) && c != '\n') {
       value_pos++;
+    }
     if (c == EOF) {
       break;
     }
@@ -89,8 +92,9 @@ int read_config_file(const char *path, config_callback_t callback, void *arg)
 
     /* read value in */
     fseek(file, -1, SEEK_CUR);
-    while (!isspace((c = fgetc(file))) && c != '\n' && c != EOF)
+    while ((c = fgetc(file)) != EOF && c != '\r' && c != '\n') {
       value_len++;
+    }
 
     name = malloc(name_len + 1);
     if (name == NULL) {
@@ -112,6 +116,11 @@ int read_config_file(const char *path, config_callback_t callback, void *arg)
     (void)fseek(file, value_pos, SEEK_SET);
     (void)fread(value, 1, value_len, file);
     value[value_len] = '\0';
+
+    /* trim trailing whitespace */
+    while (isspace(value[value_len - 1])) {
+      value[--value_len] = '\0';
+    }
 
     callback(name, value, arg);
 

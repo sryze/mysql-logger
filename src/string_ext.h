@@ -32,6 +32,7 @@
   #if !defined _MSC_VER || _MSC_VER <= 1900
     #define snprintf _snprintf
   #endif
+  #define strdup _strdup
   #define strcasecmp _stricmp
   #define strncasecmp _strnicmp
   #define strtok_r strtok_s

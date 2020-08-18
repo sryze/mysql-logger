@@ -177,12 +177,15 @@ if(UNIX)
 endif()
 
 add_executable(tests
+  src/config.c
   src/http.c
   src/json.c
   src/socket_ext.c
   src/strbuf.c
   src/string_ext.c
   tests/all_tests.c
+  tests/config_tests.c
+  tests/config_tests.h
   tests/http_tests.c
   tests/http_tests.h
   tests/json_tests.c
