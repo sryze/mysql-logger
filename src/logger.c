@@ -627,9 +627,10 @@ static void process_pending_messages(void *arg)
                 client->address_str,
                 xstrerror(ERROR_SYSTEM, socket_error));
             free_ws_client(client);
+            client = NULL;
           }
         }
-        if (client->mutex != NULL) {
+        if (client != NULL) {
           mutex_unlock(&client->mutex);
         }
       }

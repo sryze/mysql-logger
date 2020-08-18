@@ -153,13 +153,7 @@ int mutex_create(mutex_t *mutex)
 {
 #ifdef _WIN32
   #ifdef USE_LIGHTWEIGHT_MUTEXES
-    LPCRITICAL_SECTION cs =
-      HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(CRITICAL_SECTION));
-    if (cs == NULL) {
-      return ERROR_NOT_ENOUGH_MEMORY;
-    }
-    InitializeCriticalSection(cs);
-    *mutex = cs;
+    InitializeCriticalSection(mutex);
     return 0;
   #else
     *mutex = CreateMutex(NULL, FALSE, NULL);
@@ -174,7 +168,7 @@ int mutex_lock(mutex_t *mutex)
 {
 #ifdef _WIN32
   #ifdef USE_LIGHTWEIGHT_MUTEXES
-    EnterCriticalSection(*mutex);
+    EnterCriticalSection(mutex);
     return 0;
   #else
     return WaitForSingleObjectEx(*mutex, INFINITE, FALSE)
@@ -189,7 +183,7 @@ int mutex_unlock(mutex_t *mutex)
 {
 #ifdef _WIN32
   #ifdef USE_LIGHTWEIGHT_MUTEXES
-    LeaveCriticalSection(*mutex);
+    LeaveCriticalSection(mutex);
     return 0;
   #else
     return ReleaseMutex(*mutex) ? 0 : GetLastError();
@@ -203,9 +197,11 @@ int mutex_destroy(mutex_t *mutex)
 {
 #ifdef _WIN32
   #ifdef USE_LIGHTWEIGHT_MUTEXES
-    LPCRITICAL_SECTION cs = *mutex;
-    DeleteCriticalSection(cs);
-    return HeapFree(GetProcessHeap(), 0, cs) ? 0 : GetLastError();
+    DeleteCriticalSection(mutex);
+    #ifdef DEBUG
+      ZeroMemory(mutex, sizeof(*mutex));
+    #endif
+    return 0;
   #else
     return CloseHandle(*mutex) ? 0 : GetLastError();
   #endif

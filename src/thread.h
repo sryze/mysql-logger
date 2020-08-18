@@ -26,11 +26,11 @@
 #ifdef _WIN32
   #include <windows.h>
   typedef HANDLE thread_t;
-#ifdef USE_LIGHTWEIGHT_MUTEXES
-  typedef LPCRITICAL_SECTION mutex_t;
-#else
-  typedef HANDLE mutex_t;
-#endif
+  #ifdef USE_LIGHTWEIGHT_MUTEXES
+    typedef CRITICAL_SECTION mutex_t;
+  #else
+    typedef HANDLE mutex_t;
+  #endif
 #else
   #include <pthread.h>
   typedef pthread_t thread_t;
