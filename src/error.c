@@ -30,12 +30,12 @@
 
 #define MAX_ERROR_LENGTH 1024
 
-static THREAD_LOCAL char static_error_buf[MAX_ERROR_LENGTH];
+static THREAD_LOCAL char error_buf[MAX_ERROR_LENGTH];
 
 const char *xstrerror(error_domain domain, int error)
 {
-  char *buf = static_error_buf;
-  size_t size = sizeof(static_error_buf);
+  char *buf = error_buf;
+  size_t size = sizeof(error_buf);
 
 #ifdef _WIN32
 
@@ -44,8 +44,8 @@ const char *xstrerror(error_domain domain, int error)
     DWORD count;
     count = FormatMessageA(
       FORMAT_MESSAGE_FROM_SYSTEM
-          | FORMAT_MESSAGE_IGNORE_INSERTS
-          | FORMAT_MESSAGE_MAX_WIDTH_MASK,
+        | FORMAT_MESSAGE_IGNORE_INSERTS
+        | FORMAT_MESSAGE_MAX_WIDTH_MASK,
       NULL,
       error,
       MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),

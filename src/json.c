@@ -28,6 +28,45 @@
 #define JSON_MAX_DOUBLE_SIZE 25
 #define JSON_MAX_LONGLONG_SIZE 40
 
+int json_encode(struct strbuf *json, const char *format, ...)
+{
+  va_list args;
+  size_t len = strlen(format);
+
+  va_start(args, format);
+  {
+    for (size_t i = 0; i < len; i++) {
+      if (format[i] == '%' && i + 1 < len) {
+        switch (format[++i]) {
+          case 'b':
+            json_encode_bool(json, va_arg(args, int));
+            break;
+          case 'f':
+            json_encode_double(json, va_arg(args, double));
+            break;
+          case 'i':
+            json_encode_integer(json, va_arg(args, int));
+            break;
+          case 'l':
+            json_encode_integer(json, va_arg(args, long));
+            break;
+          case 'L':
+            json_encode_integer(json, va_arg(args, long long));
+            break;
+          case 's':
+            json_encode_string(json, va_arg(args, char *));
+            break;
+        }
+      } else {
+        strbuf_appendn(json, &format[i], 1);
+      }
+    }
+  }
+  va_end(args);
+
+  return 0;
+}
+
 int json_encode_bool(struct strbuf *json, bool value)
 {
   return strbuf_append(json, value ? "true" : "false");
@@ -78,45 +117,6 @@ int json_encode_string(struct strbuf *json, const char *str)
   }
 
   strbuf_append(json, "\""); /* closing quote */
-
-  return 0;
-}
-
-int json_encode(struct strbuf *json, const char *format, ...)
-{
-  va_list args;
-  size_t len = strlen(format);
-
-  va_start(args, format);
-  {
-    for (size_t i = 0; i < len; i++) {
-      if (format[i] == '%' && i + 1 < len) {
-        switch (format[++i]) {
-          case 'b':
-            json_encode_bool(json, va_arg(args, int));
-            break;
-          case 'f':
-            json_encode_double(json, va_arg(args, double));
-            break;
-          case 'i':
-            json_encode_integer(json, va_arg(args, int));
-            break;
-          case 'l':
-            json_encode_integer(json, va_arg(args, long));
-            break;
-          case 'L':
-            json_encode_integer(json, va_arg(args, long long));
-            break;
-          case 's':
-            json_encode_string(json, va_arg(args, char *));
-            break;
-        }
-      } else {
-        strbuf_appendn(json, &format[i], 1);
-      }
-    }
-  }
-  va_end(args);
 
   return 0;
 }
