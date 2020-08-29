@@ -51,7 +51,7 @@ int read_config(const char *str, config_callback_t callback, void *arg)
     while (i < len && isspace((c = str[i++]))) {
       name_pos++;
     }
-    if (c == EOF) {
+    if (i >= len || c == EOF) {
       break;
     }
 
@@ -60,14 +60,14 @@ int read_config(const char *str, config_callback_t callback, void *arg)
     while (i < len && !isspace((c = str[i++])) && c != '=') {
       name_len++;
     }
-    if (c == EOF) {
+    if (i >= len || c == EOF) {
       break;
     }
 
     /* skip '=' and optional whitespace around it */
     if (c != '=') {
       while (i < len && isspace((c = str[i++])) && c != '\n' && c != '=');
-      if (c == EOF) {
+      if (i >= len || c == EOF) {
         break;
       }
       if (c == '\n') {
@@ -81,7 +81,7 @@ int read_config(const char *str, config_callback_t callback, void *arg)
     while (i < len && isspace((c = str[i++])) && c != '\n') {
       value_pos++;
     }
-    if (c == EOF) {
+    if (c >= len || c == EOF) {
       break;
     }
     if (c == '\n') {
