@@ -142,13 +142,13 @@ static void log_printf(const char *prefix, const char *format, ...)
 
   mutex_lock(&log_mutex);
 
-  printf(prefix);
+  printf("%s", prefix);
   va_start(args, format);
   vprintf(format, args);
   va_end(args);
 
   if (log_file != NULL) {
-    fprintf(log_file, prefix);
+    fprintf(log_file, "%s", prefix);
     va_start(args, format);
     vfprintf(log_file, format, args);
     va_end(args);
