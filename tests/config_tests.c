@@ -30,7 +30,7 @@ static void config_callback(const char *name, const char *value, void *arg)
 
 void test_read_config(void)
 {
-  struct config_data data = { NULL, NULL };
+  struct config_data data = {NULL, NULL};
   int result;
 
   result = read_config("foo = 1\n\nbar = hello world   \n",
@@ -38,6 +38,8 @@ void test_read_config(void)
                        &data);
 
   TEST(result == 0);
+  TEST(data.foo != NULL);
+  TEST(data.bar != NULL);
   TEST(strcmp(data.foo, "1") == 0);
   TEST(strcmp(data.bar, "hello world") == 0);
 }
@@ -46,12 +48,16 @@ void test_read_config(void)
 void test_read_config_file(void)
 {
   struct config_data data = {NULL, NULL};
-  char *name;
   FILE *file;
   int result;
-
-  name = tmpnam(NULL);
-  file = fopen(name, "w");
+#ifdef _WIN32
+  char *name = tmpnam(NULL);
+  file = fopen(name, "wb");
+#else
+  char name[] = "config_test_XXXXXX";
+  file = fdopen(mkstemp(name), "w");
+#endif
+  TEST(file != NULL);
 
   fputs("foo = 1\n\n", file);
   fputs("bar = hello world   \n", file);
@@ -60,6 +66,8 @@ void test_read_config_file(void)
   result = read_config_file(name, config_callback, &data);
 
   TEST(result == 0);
+  TEST(data.foo != NULL);
+  TEST(data.bar != NULL);
   TEST(strcmp(data.foo, "1") == 0);
   TEST(strcmp(data.bar, "hello world") == 0);
 }

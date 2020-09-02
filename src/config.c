@@ -81,7 +81,7 @@ int read_config(const char *str, config_callback_t callback, void *arg)
     while (i < len && isspace((c = str[i++])) && c != '\n') {
       value_pos++;
     }
-    if (c >= len || c == EOF) {
+    if (i >= len || c == EOF) {
       break;
     }
     if (c == '\n') {

@@ -16,3 +16,4 @@ before_script:
 
 script:
   - cmake --build .
+  - ctest --config Release

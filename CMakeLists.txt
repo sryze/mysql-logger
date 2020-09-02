@@ -176,7 +176,9 @@ if(UNIX)
   endif()
 endif()
 
-add_executable(tests
+include(CTest)
+
+add_executable(logger_tests
   src/config.c
   src/http.c
   src/json.c
@@ -196,7 +198,9 @@ add_executable(tests
   tests/string_ext_tests.h
   tests/test.h
 )
-target_include_directories(tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_include_directories(logger_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 if(WIN32)
-  target_link_libraries(tests ws2_32)
+  target_link_libraries(logger_tests ws2_32)
 endif()
+
+add_test(NAME run_logger_tests COMMAND $<TARGET_FILE:logger_tests>)
