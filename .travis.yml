@@ -15,5 +15,5 @@ before_script:
   - cmake .. -DCMAKE_BUILD_TYPE=Release
 
 script:
-  - cmake --build .
-  - ctest --config Release
+  - cmake --build . --config Release
+  - ctest --build-config Release

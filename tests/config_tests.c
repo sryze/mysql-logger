@@ -65,6 +65,8 @@ void test_read_config_file(void)
 
   result = read_config_file(name, config_callback, &data);
 
+  remove(name);
+
   TEST(result == 0);
   TEST(data.foo != NULL);
   TEST(data.bar != NULL);
