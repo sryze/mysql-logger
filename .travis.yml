@@ -5,10 +5,29 @@ matrix:
     - os: linux
       dist: xenial
       sudo: required
-      compiler: gcc
-    - os: osx
-      compiler: clang
+      addons:
+        apt:
+          update: true
+          packages:
+            - libmariadb-client-lgpl-dev
+            - libmariadb-client-lgpl-dev-compat
+        snaps:
+          - ffsend
+    - os: freebsd
+      before_install:
+        - sudo pkg install -y ffsend mariadb104-server
+    - os: osx 
+      addons:
+        homebrew:
+          packages:
+            - mariadb-server
+            - mariadb-client
+            - ffsend
+          update: true
     - os: windows
+      before_install:
+        - curl -L https://github.com/timvisee/ffsend/releases/download/v0.2.65/ffsend-v0.2.65-windows-x64-static.exe -o ffsend.exe
+        - export PATH=$PATH:$PWD
 
 before_script:
   - mkdir build && cd build
@@ -17,3 +36,7 @@ before_script:
 script:
   - cmake --build . --config Release
   - ctest --build-config Release
+  - cmake --build . --config Release --target package
+
+after_script:
+  - ffsend upload mysql-logger-*.*

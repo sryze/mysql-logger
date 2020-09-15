@@ -1,27 +1,72 @@
-project(mysql-logger C)
-cmake_minimum_required(VERSION 3.0)
+﻿cmake_minimum_required(VERSION 3.0)
 
 if(POLICY CMP0042)
   cmake_policy(SET CMP0042 NEW)
 endif()
+if(POLICY CMP0048)
+  cmake_policy(SET CMP0048 NEW)
+endif()
+
+project(mysql-logger
+  VERSION 0.1
+  LANGUAGES C
+)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-# Download the necessary MySQL plugin development headers.
+################################################################################
+# Dependencies
+################################################################################
+
+# Debian/Ubuntu:
+# apt-get install mariadb-server libmariadbclient-dev libmariadb-dev-compat
 #
-# MySQL packages in some Linux distributions (e.g. Debian) do not contain all
-# the header files needed for plugin development. Therefore we download them
-# manually here. This also makes it easier to build the code on other platforms.
+# Fedora (and probably CentOS):
+# dnf install mariadb-server mariadb-devel mariadb-connector-c-devel
 #
-# Download source code for MariaDB 10.1.8 (first stable release in the 10.1
-# branch) and unpack the include directory to CMAKE_CURRENT_BINARY_DIR/include.
+# macOS:
+# brew install mariadb
 #
-set(mysql_src_url
-    "https://github.com/MariaDB/server/archive/mariadb-10.1.8.tar.gz")
-set(mysql_src_checksum "ebaf77d8acee9335b920dbca72d19e17")
-set(mysql_src_archive "${CMAKE_CURRENT_BINARY_DIR}/mariadb-10.1.8.tar.gz")
-set(mysql_include_dir server-mariadb-10.1.8/include)
+# Windows and others:
+# Just let CMake download the headers for you (see below).
+
+find_path(MYSQL_SYSTEM_INCLUDE_DIR
+          mysql/plugin.h
+          PATH_SUFFIXES mysql
+                        mysql/server
+                        mysql/server/mysql
+                        mariadb
+                        mariadb/server
+                        mariadb/server/mysql)
+if(MYSQL_SYSTEM_INCLUDE_DIR)
+  include(CheckCSourceCompiles)
+  set(CMAKE_REQUIRED_INCLUDES "${MYSQL_SYSTEM_INCLUDE_DIR}")
+  check_c_source_compiles("
+    #include <mysql/plugin.h>
+    #include <mysql/plugin_audit.h>
+    int main() {}
+  " MYSQL_INCLUDES_OK)
+  set(CMAKE_REQUIRED_INCLUDES "")
+  if(MYSQL_INCLUDES_OK)
+    set(MYSQL_INCLUDE_DIR ${MYSQL_SYSTEM_INCLUDE_DIR})
+  else()
+    message("Found broken MySQL headers at ${MYSQL_SYSTEM_INCLUDE_DIR}")
+  endif()
+endif()
 if(NOT MYSQL_INCLUDE_DIR)
+  #
+  # Download the necessary MySQL development headers.
+  #
+  # MySQL packages in some Linux distributions (e.g. Debian) do not contain
+  # all the header files needed for plugin development. Therefore we download
+  # them manually here. This also makes it easier to build the code on other
+  # platforms.
+  #
+  set(mysql_src_url
+      "https://github.com/MariaDB/server/archive/mariadb-10.1.8.tar.gz")
+  set(mysql_src_checksum "ebaf77d8acee9335b920dbca72d19e17")
+  set(mysql_src_archive "${CMAKE_CURRENT_BINARY_DIR}/mariadb-10.1.8.tar.gz")
+  set(mysql_include_dir server-mariadb-10.1.8/include)
   if(NOT EXISTS "${mysql_src_archive}")
     message("Downloading MySQL headers")
     file(DOWNLOAD
@@ -37,16 +82,19 @@ if(NOT MYSQL_INCLUDE_DIR)
       tar xzf "${mysql_src_archive}" -- "${mysql_include_dir}"
       WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
   endif()
+  find_path(MYSQL_INCLUDE_DIR
+            mysql/plugin.h
+            HINTS "${CMAKE_CURRENT_BINARY_DIR}/${mysql_include_dir}")
 endif()
-
-find_path(MYSQL_INCLUDE_DIR mysql/plugin.h
-          HINTS "${CMAKE_CURRENT_BINARY_DIR}/${mysql_include_dir}"
-          NO_CMAKE_SYSTEM_PATH)
 if(NOT MYSQL_INCLUDE_DIR)
-  message(FATAL_ERROR "Could not find MySQL headers")
+  message(FATAL_ERROR "Could NOT find MySQL headers")
 else()
   message("Found MySQL headers: ${MYSQL_INCLUDE_DIR}")
 endif()
+
+################################################################################
+# Build
+################################################################################
 
 if(CMAKE_C_COMPILER_ID MATCHES ".*Clang.*")
   set(COMPILER_IS_CLANG 1)
@@ -58,7 +106,9 @@ endif()
 
 add_compile_options("$<$<CONFIG:DEBUG>:-DDEBUG>")
 
-if(CMAKE_COMPILER_IS_GNUCC OR COMPILER_IS_CLANG)
+if(MSVC)
+  add_compile_definitions(/Wall)
+elseif(CMAKE_COMPILER_IS_GNUCC OR COMPILER_IS_CLANG)
   add_compile_options(-Wall)
   add_compile_options("$<$<CONFIG:RELEASE>:-Werror>")
 endif()
@@ -176,6 +226,10 @@ if(UNIX)
   endif()
 endif()
 
+################################################################################
+# Tests
+################################################################################
+
 include(CTest)
 
 add_executable(logger_tests
@@ -204,3 +258,18 @@ if(WIN32)
 endif()
 
 add_test(NAME run_logger_tests COMMAND $<TARGET_FILE:logger_tests>)
+
+################################################################################
+# Packaging
+################################################################################
+
+install(FILES $<TARGET_FILE:logger> DESTINATION .)
+
+set(CPACK_PACKAGE_NAME ${PROJECT_NAME})
+if(WIN32 OR APPLE)
+  set(CPACK_GENERATOR ZIP)
+elseif(UNIX)
+  set(CPACK_GENERATOR TGZ)
+endif()
+
+include(CPack)

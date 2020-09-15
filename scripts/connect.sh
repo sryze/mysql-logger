@@ -1,8 +1,3 @@
 #!/bin/sh
 
-SOCKET=
-if [ `uname -s` = 'Linux' ]; then
-  SOCKET="-S /tmp/mysql.sock"
-fi
-
-mysql -P3307 -uroot $SOCKET $*
+mysql -h 127.0.0.1 -P 3307 -D logger_testing

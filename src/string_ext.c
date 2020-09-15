@@ -31,7 +31,7 @@ bool strcasebegin(const char *str, const char *substr)
   return strncasecmp(str, substr, strlen(substr)) == 0;
 }
 
-#ifndef __linux__
+#ifndef HAVE_STRNDUP
 
 char *strndup(const char *str, size_t len)
 {
@@ -48,9 +48,9 @@ char *strndup(const char *str, size_t len)
   return str_dup;
 }
 
-#endif
+#endif /* HAVE_STRNDUP */
 
-#ifndef __APPLE__
+#ifndef HAVE_STRNSTR
 
 const char *strnstr(const char *str, const char *substr, size_t len)
 {
@@ -70,7 +70,7 @@ const char *strnstr(const char *str, const char *substr, size_t len)
   return NULL;
 }
 
-#endif /* __APPLE__ */
+#endif /* HAVE_STRNSTR */
 
 int atoin(const char *str, size_t len)
 {
@@ -94,17 +94,4 @@ int atoin(const char *str, size_t len)
   }
 
   return value;
-}
-
-int strprintf(char **buf, const char *format, ...)
-{
-  va_list args;
-  int len;
-
-  va_start(args, format);
-  va_end(args);
-
-  len = vsnprintf(NULL, 0, format, args);
-
-  return len;
 }

@@ -38,27 +38,24 @@
   #define strtok_r strtok_s
 #endif
 
+#if defined __APPLE__ || defined __FreeBSD__ || defined __NetBSD__ || \
+    defined __OpenBSD__ || defined __DragonFly__
+  #define HAVE_STRNSTR
+#endif
+
+#ifdef __linux__
+  #define HAVE_STRNDUP
+#endif
+
 bool strcasebegin(const char *str, const char *substr);
 
-#ifndef __linux__
+#ifndef HAVE_STRNDUP
   char *strndup(const char *str, size_t len);
 #endif
-#ifndef __APPLE__
+#ifndef HAVE_STRNSTR
   const char *strnstr(const char *str, const char *substr, size_t len);
 #endif
 
 int atoin(const char *str, size_t len);
-
-#if 0
-
-#define strprintf(buf_ptr, len_ptr, format, ...) \
-  do { \
-    size_t len; \
-    len = snprintf(NULL, 0, format, __VA__ARGS__); \
-  } while (0)
-
-#endif
-
-int strprintf(char **buf, const char *format, ...);
 
 #endif /* STRING_EXT_H */

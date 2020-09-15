@@ -366,7 +366,7 @@ int ws_recv(
   header = ntohs(header);
   opcode = (header & 0x0F00) >> 8;
   mask = (header & WS_FLAG_MASK) != 0;
-  payload_len = header & 0x7F; 
+  payload_len = header & 0x7F;
 
   *out_opcode = opcode;
 

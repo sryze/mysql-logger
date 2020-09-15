@@ -77,9 +77,7 @@ const char *http_parse_request_line(
   }
 
   for (i = 0; i < COUNT_OF(http_methods); i++) {
-    if (strnstr(p_start,
-                http_methods[i],
-                p - p_start) != NULL) {
+    if (strnstr(p_start, http_methods[i], p - p_start) != NULL) {
       break;
     }
   }
