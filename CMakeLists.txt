@@ -8,7 +8,7 @@ if(POLICY CMP0048)
 endif()
 
 project(mysql-logger
-  VERSION 0.1
+  VERSION 0.1.1
   LANGUAGES C
 )
 
