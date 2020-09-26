@@ -106,10 +106,30 @@ int json_encode_string(struct strbuf *json, const char *str)
 
   for (i = 0; i < len; i++) {
     int error;
-    if (str[i] == '"') {
-      error = strbuf_append(json, "\\\"");
-    } else {
-      error = strbuf_appendn(json, &str[i], 1);
+    switch (str[i]) {
+      case '"':
+        error = strbuf_append(json, "\\\"");
+        break;
+      case '\\':
+        error = strbuf_append(json, "\\\\");
+        break;
+      case '\b':
+        error = strbuf_append(json, "\\b");
+        break;
+      case '\f':
+        error = strbuf_append(json, "\\f");
+        break;
+      case '\n':
+        error = strbuf_append(json, "\\n");
+        break;
+      case '\r':
+        error = strbuf_append(json, "\\r");
+        break;
+      case '\t':
+        error = strbuf_append(json, "\\t");
+        break;
+      default:
+        error = strbuf_appendn(json, &str[i], 1);
     }
     if (error != 0) {
       return error;

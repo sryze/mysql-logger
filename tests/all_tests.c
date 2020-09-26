@@ -16,6 +16,7 @@ int main(void)
   test_json_encode_double();
   test_json_encode_string();
   test_json_encode();
+  test_json_control_char_escaping();
 
   test_http_request_line_parsing();
   test_http_header_parsing();

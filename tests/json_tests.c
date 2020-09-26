@@ -65,3 +65,43 @@ void test_json_encode(void)
   TEST(strcmp(json.str, "This is a \"test\". The number of days in a year is usually 365. It is false that the Earth is flat.") == 0);
   strbuf_free(&json);
 }
+
+void test_json_control_char_escaping(void)
+{
+  struct strbuf json;
+
+  strbuf_alloc_default(&json);
+  json_encode_string(&json, "\"");
+  TEST(strcmp(json.str, "\"\\\"\"") == 0);
+  strbuf_free(&json);
+
+  strbuf_alloc_default(&json);
+  json_encode_string(&json, "\\");
+  TEST(strcmp(json.str, "\"\\\\\"") == 0);
+  strbuf_free(&json);
+
+  strbuf_alloc_default(&json);
+  json_encode_string(&json, "\b");
+  TEST(strcmp(json.str, "\"\\b\"") == 0);
+  strbuf_free(&json);
+
+  strbuf_alloc_default(&json);
+  json_encode_string(&json, "\f");
+  TEST(strcmp(json.str, "\"\\f\"") == 0);
+  strbuf_free(&json);
+
+  strbuf_alloc_default(&json);
+  json_encode_string(&json, "\n");
+  TEST(strcmp(json.str, "\"\\n\"") == 0);
+  strbuf_free(&json);
+
+  strbuf_alloc_default(&json);
+  json_encode_string(&json, "\r");
+  TEST(strcmp(json.str, "\"\\r\"") == 0);
+  strbuf_free(&json);
+
+  strbuf_alloc_default(&json);
+  json_encode_string(&json, "\t");
+  TEST(strcmp(json.str, "\"\\t\"") == 0);
+  strbuf_free(&json);
+}
