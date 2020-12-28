@@ -1,8 +1,14 @@
+var escape = document.createElement('textarea');
 var queries = [];
 var emptyMessage = document.getElementById('empty-message');
 var tableContainer = document.getElementById('table-container');
 var table = document.getElementById('table');
 var infoPanel = document.getElementById('info-panel');
+
+function escapeHTML(html) {
+    escape.textContent = html;
+    return escape.innerHTML;
+}
 
 function hasClass(element, className) {
   return new RegExp('\\b' + className + '\\b', 'g').test(element.className);
@@ -94,7 +100,7 @@ function updateInfoPanelForQuery(query) {
 }
 
 function createHighlightedQuery(queryText) {
-  return '<span class="code">' + queryText + '</span>';
+  return '<span class="code">' + escapeHTML(queryText) + '</span>';
 }
 
 function createQueryInfo(query) {
