@@ -165,7 +165,7 @@ int recv_n(socket_t sock, char *buf, int size, int flags, recv_handler_t handler
       break;
     }
     recv_len = recv(sock, buf + len, size - len, flags);
-    if (recv_len <= 0) {
+    if (recv_len < 0) {
       return recv_len;
     }
     if (recv_len == 0) {
@@ -190,7 +190,7 @@ int send_n(socket_t sock, const char *buf, int size, int flags)
       break;
     }
     send_len = send(sock, buf + len, size - len, flags);
-    if (send_len <= 0) {
+    if (send_len < 0) {
       return send_len;
     }
     if (send_len == 0) {
