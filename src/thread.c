@@ -96,17 +96,26 @@ int thread_create(thread_t *handle,
 int thread_set_name(thread_t handle, const char *name)
 {
 #ifdef _WIN32
+  typedef HRESULT (WINAPI *SetThreadDescriptionFunc)(
+    HANDLE hThread, PCWSTR lpThreadDescription);
+
   WCHAR name_w[MAX_THREAD_NAME];
   HRESULT result;
+  HMODULE kernel32_module;
+  SetThreadDescriptionFunc set_thread_description_func;
 
-  if (MultiByteToWideChar(CP_UTF8,
-                          0,
-                          name,
-                          -1,
-                          name_w,
-                          sizeof(name_w)) != 0) {
-    result = SetThreadDescription(handle, name_w);
-    return FAILED(result) ? HRESULT_CODE(result) : 0;
+  /* SetThreadDescription() is available starting from Windows 10 1607 */
+  kernel32_module = GetModuleHandle("kernel32.dll");
+  if (kernel32_module != NULL) {
+    set_thread_description_func = (SetThreadDescriptionFunc)
+      GetProcAddress(kernel32_module, "SetThreadDescription");
+    if (set_thread_description_func != NULL) {
+      if (MultiByteToWideChar(
+          CP_UTF8, 0, name, -1, name_w, sizeof(name_w) / sizeof(WCHAR)) != 0) {
+        result = set_thread_description_func(handle, name_w);
+        return FAILED(result) ? HRESULT_CODE(result) : 0;
+      }
+    }
   }
   return GetLastError();
 #else
