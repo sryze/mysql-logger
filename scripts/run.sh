@@ -4,23 +4,30 @@ DIR=$(realpath $(dirname $0))
 . $DIR/include/data-dir.sh
 . $DIR/include/mysqld.sh
 
-case "$1" in
-  --logger-lib)
-    shift
-    logger_lib="$1"
-    if [ -z "$logger_lib" ]; then
-      echo "Option --logger-lib requires a value"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --logger-lib)
+      shift
+      logger_lib="$1"
+      if [ -z "$logger_lib" ]; then
+        echo "Option --logger_lib requires a value"
+        exit 1
+      fi
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
       exit 1
-    fi
-    shift
-    ;;
-  *)
-    echo "Unknown option: $1"
-    exit 1
-esac
+  esac
+done
 
-plugin_dir=$(realpath $(dirname "$logger_lib"))
-plugin_name=$(basename $logger_lib)
+if [[ -z "$logger_lib" ]]; then
+  plugin_dir=$PWD
+  plugin_name=logger
+else
+  plugin_dir=$(realpath $(dirname "$logger_lib"))
+  plugin_name=$(basename $logger_lib)
+fi
 
 "$MYSQLD" \
   --no-defaults \
