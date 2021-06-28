@@ -793,18 +793,18 @@ static struct st_mysql_sys_var *logger_sys_vars[] = {
 };
 
 mysql_declare_plugin(logger) {
-  MYSQL_AUDIT_PLUGIN,         /* type                            */
-  &logger_descriptor,         /* descriptor                      */
-  "LOGGER",                   /* name                            */
-  "Sergey Zolotarev",         /* author                          */
-  "Nice query logger",        /* description                     */
-  PLUGIN_LICENSE_PROPRIETARY,
-  logger_plugin_init,         /* init function (when loaded)     */
-  logger_plugin_deinit,       /* deinit function (when unloaded) */
-  0x0001,                     /* version                         */
-  NULL,                       /* status variables                */
-  logger_sys_vars,            /* system variables                */
-  NULL,
-  MariaDB_PLUGIN_MATURITY_STABLE
+  MYSQL_AUDIT_PLUGIN,           /* type                            */
+  &logger_descriptor,           /* descriptor                      */
+  "LOGGER",                     /* name                            */
+  "Sergey Zolotarev",           /* author                          */
+  "Nice query logger",          /* description                     */
+  PLUGIN_LICENSE_PROPRIETARY,   /* plugin license                  */
+  logger_plugin_init,           /* init function (when loaded)     */
+  logger_plugin_deinit,         /* deinit function (when unloaded) */
+  0x0100,                       /* version                         */
+  NULL,                         /* status variables                */
+  logger_sys_vars,              /* system variables                */
+  "1.0",                        /* string version representation   */
+  MariaDB_PLUGIN_MATURITY_GAMMA /* maturity                        */
 }
 mysql_declare_plugin_end;
