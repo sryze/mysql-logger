@@ -43,6 +43,13 @@
 #include "ui_index_js.h"
 #include "ws.h"
 
+#ifndef maria_declare_plugin
+    #define maria_declare_plugin mysql_declare_plugin
+#endif
+#ifndef MariaDB_PLUGIN_MATURITY_GAMMA
+    #define MariaDB_PLUGIN_MATURITY_GAMMA 0
+#endif
+
 #define MYSQL_PORT 3306
 #define MYSQL_LOGGER_PORT (MYSQL_PORT + 10000)
 #define MAX_HTTP_HEADERS (8 * 1024) /* HTTP RFC recommends at least 8000 */
@@ -792,7 +799,7 @@ static struct st_mysql_sys_var *logger_sys_vars[] = {
   NULL
 };
 
-mysql_declare_plugin(logger) {
+maria_declare_plugin(logger) {
   MYSQL_AUDIT_PLUGIN,           /* type                            */
   &logger_descriptor,           /* descriptor                      */
   "LOGGER",                     /* name                            */
@@ -807,4 +814,4 @@ mysql_declare_plugin(logger) {
   "1.0",                        /* string version representation   */
   MariaDB_PLUGIN_MATURITY_GAMMA /* maturity                        */
 }
-mysql_declare_plugin_end;
+maria_declare_plugin_end;
