@@ -43,13 +43,6 @@
 #include "ui_index_js.h"
 #include "ws.h"
 
-#ifndef maria_declare_plugin
-    #define maria_declare_plugin mysql_declare_plugin
-#endif
-#ifndef MariaDB_PLUGIN_MATURITY_GAMMA
-    #define MariaDB_PLUGIN_MATURITY_GAMMA 0
-#endif
-
 #define MYSQL_PORT 3306
 #define MYSQL_LOGGER_PORT (MYSQL_PORT + 10000)
 #define MAX_HTTP_HEADERS (8 * 1024) /* HTTP RFC recommends at least 8000 */
@@ -799,19 +792,39 @@ static struct st_mysql_sys_var *logger_sys_vars[] = {
   NULL
 };
 
+
+#ifndef maria_declare_plugin
+    #define maria_declare_plugin mysql_declare_plugin
+#endif
+#ifndef MariaDB_PLUGIN_MATURITY_GAMMA
+    #define MariaDB_PLUGIN_MATURITY_GAMMA 0
+#endif
+
+#define _(x) x
+
+#define LOGGER_PLUGIN_DECLARATIONS \
+  _(MYSQL_AUDIT_PLUGIN), \
+  _(&logger_descriptor), \
+  _("LOGGER"), \
+  _("Sergey Zolotarev"), \
+  _("Nice query logger"), \
+  _(PLUGIN_LICENSE_PROPRIETARY), \
+  _(logger_plugin_init), \
+  _(logger_plugin_deinit), \
+  _(0x0100), \
+  _(NULL), \
+  _(logger_sys_vars)
+
+mysql_declare_plugin(logger) {
+  LOGGER_PLUGIN_DECLARATIONS,
+  NULL,
+  0
+}
+mysql_declare_plugin_end;
+
 maria_declare_plugin(logger) {
-  MYSQL_AUDIT_PLUGIN,           /* type                            */
-  &logger_descriptor,           /* descriptor                      */
-  "LOGGER",                     /* name                            */
-  "Sergey Zolotarev",           /* author                          */
-  "Nice query logger",          /* description                     */
-  PLUGIN_LICENSE_PROPRIETARY,   /* plugin license                  */
-  logger_plugin_init,           /* init function (when loaded)     */
-  logger_plugin_deinit,         /* deinit function (when unloaded) */
-  0x0100,                       /* version                         */
-  NULL,                         /* status variables                */
-  logger_sys_vars,              /* system variables                */
-  "1.0",                        /* string version representation   */
-  MariaDB_PLUGIN_MATURITY_GAMMA /* maturity                        */
+  LOGGER_PLUGIN_DECLARATIONS,
+  "1.0",
+  MariaDB_PLUGIN_MATURITY_GAMMA
 }
 maria_declare_plugin_end;
