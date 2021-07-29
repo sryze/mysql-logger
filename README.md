@@ -1,7 +1,7 @@
 MySQL Logger
 ============
 
-[![Build Status](https://travis-ci.org/sryze/mysql-logger.svg?branch=master)](https://travis-ci.org/sryze/mysql-logger)
+[![Build Status](https://travis-ci.com/sryze/mysql-logger.svg?branch=master)](https://travis-ci.com/sryze/mysql-logger)
 
 MySQL Logger is a server-side plugin for MySQL/MariaDB that allows you to see
 what SQL queries are executed by your server in real time inside a web browser.
