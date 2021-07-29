@@ -39,7 +39,8 @@
 #endif
 
 #if defined __APPLE__ || defined __FreeBSD__ || defined __NetBSD__ || \
-    defined __OpenBSD__ || defined __DragonFly__
+    defined __OpenBSD__ || defined __DragonFly__ || defined __CYGWIN__ || \
+    defined __MINGW__
   #define HAVE_STRNSTR
 #endif
 
