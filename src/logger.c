@@ -792,7 +792,6 @@ static struct st_mysql_sys_var *logger_sys_vars[] = {
   NULL
 };
 
-
 #ifndef maria_declare_plugin
     #define maria_declare_plugin mysql_declare_plugin
 #endif
@@ -800,6 +799,7 @@ static struct st_mysql_sys_var *logger_sys_vars[] = {
     #define MariaDB_PLUGIN_MATURITY_GAMMA 0
 #endif
 
+#undef _
 #define _(x) x
 
 #define LOGGER_PLUGIN_DECLARATIONS \
