@@ -63,10 +63,10 @@ if(NOT MYSQL_INCLUDE_DIR)
   # platforms.
   #
   set(mysql_src_url
-      "https://github.com/MariaDB/server/archive/mariadb-10.1.8.tar.gz")
-  set(mysql_src_checksum "ebaf77d8acee9335b920dbca72d19e17")
-  set(mysql_src_archive "${CMAKE_CURRENT_BINARY_DIR}/mariadb-10.1.8.tar.gz")
-  set(mysql_include_dir server-mariadb-10.1.8/include)
+      "https://github.com/MariaDB/server/archive/mariadb-10.1.9.tar.gz")
+  set(mysql_src_checksum "71d0e2408a671e1125c1310ce657f688")
+  set(mysql_src_archive "${CMAKE_CURRENT_BINARY_DIR}/mariadb-10.1.9.tar.gz")
+  set(mysql_include_dir server-mariadb-10.1.9/include)
   if(NOT EXISTS "${mysql_src_archive}")
     message("Downloading MySQL headers")
     file(DOWNLOAD
