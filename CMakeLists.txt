@@ -64,7 +64,7 @@ if(NOT MYSQL_INCLUDE_DIR)
   #
   set(mysql_src_url
       "https://github.com/MariaDB/server/archive/mariadb-10.1.9.tar.gz")
-  set(mysql_src_checksum "71d0e2408a671e1125c1310ce657f688")
+  set(mysql_src_checksum "165e03d0c2f7c11f638c1a6413d6a1fe")
   set(mysql_src_archive "${CMAKE_CURRENT_BINARY_DIR}/mariadb-10.1.9.tar.gz")
   set(mysql_include_dir server-mariadb-10.1.9/include)
   if(NOT EXISTS "${mysql_src_archive}")
