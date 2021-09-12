@@ -38,12 +38,9 @@ static const char base64_index_table[] = {
   '4', '5', '6', '7', '8', '9' , '+', '/'
 };
 
-size_t base64_encode(const void *data,
-                     size_t len,
-                     char *buf,
-                     size_t buf_size)
+size_t base64_encode(const void *data, size_t len, char *buf, size_t buf_size)
 {
-  const unsigned char *bytes = data;
+  const unsigned char *bytes = (const unsigned char *)data;
   size_t num_chars =
       (len * BYTE_BITS) / CHAR_BITS + ((len * BYTE_BITS) % CHAR_BITS != 0);
   size_t i;

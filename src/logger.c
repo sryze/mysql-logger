@@ -28,6 +28,9 @@
 #include <string.h>
 #include <mysql/plugin.h>
 #include <mysql/plugin_audit.h>
+#ifdef __cplusplus
+  extern "C" {
+#endif
 #include "defs.h"
 #include "error.h"
 #include "http.h"
@@ -42,6 +45,15 @@
 #include "ui_index_css.h"
 #include "ui_index_js.h"
 #include "ws.h"
+#ifdef __cplusplus
+  }
+#endif
+
+#ifdef MariaDB_PLUGIN_MATURITY_STABLE
+  #define TARGET_MARIADB 1
+#else
+  #define TARGET_MARIADB 0
+#endif
 
 #define MYSQL_PORT 3306
 #define MYSQL_LOGGER_PORT (MYSQL_PORT + 10000)
@@ -53,11 +65,22 @@
 #define MAX_MESSAGE_QUEUE_SIZE 10240
 
 #define LOG(...) log_printf("[logger] ", __VA_ARGS__)
+#define LOG_ERROR(...) \
+  do {\
+    if (config_trace) \
+      log_printf("[logger] ERROR: ", __VA_ARGS__); \
+  } while (false)
 #define LOG_TRACE(...) \
   do {\
     if (config_trace) \
-      log_printf("[logger:trace] ", __VA_ARGS__); \
+      log_printf("[logger] TRACE: ", __VA_ARGS__); \
   } while (false)
+
+#if TARGET_MARIADB
+  #define CSTR(s) (s)
+#else
+  #define CSTR(s) (s).str
+#endif
 
 struct http_resource {
   const char *path;
@@ -84,7 +107,7 @@ static FILE *log_file;
 
 static int config_http_port;
 static int config_ws_port;
-static char config_trace;
+static bool config_trace;
 
 /* HTTP -> plugin */
 static volatile bool http_server_active;
@@ -132,8 +155,12 @@ static struct ws_message *message_queue_tail;
 static volatile long pending_message_count;
 static mutex_t message_queue_mutex;
 
-#if MYSQL_AUDIT_INTERFACE_VERSION < 0x0302
+#if !TARGET_MARIADB || MYSQL_AUDIT_INTERFACE_VERSION < 0x0302
   static volatile long query_id_counter = 1;
+#endif
+
+#if TARGET_MARIADB
+  typedef unsigned int mysql_event_class_t;
 #endif
 
 static void log_printf(const char *prefix, const char *format, ...)
@@ -157,7 +184,8 @@ static void log_printf(const char *prefix, const char *format, ...)
   mutex_unlock(&log_mutex);
 }
 
-static void serve(unsigned short port,
+static void serve(const char *tag,
+                  unsigned short port,
                   socket_t *sock,
                   volatile bool *flag,
                   int (*handler)(socket_t))
@@ -175,7 +203,7 @@ static void serve(unsigned short port,
 
   server_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (server_sock < 0) {
-    LOG("ERROR: Could not open socket: %s\n",
+    LOG_ERROR("Could not open socket: %s\n",
         xstrerror(ERROR_SYSTEM, socket_error));
     return;
   }
@@ -184,7 +212,7 @@ static void serve(unsigned short port,
    * Allow reuse of this socket address (port) without waiting.
    */
   opt = 1;
-  setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, (void *)&opt, sizeof(opt));
+  setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt));
 
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
@@ -193,7 +221,7 @@ static void serve(unsigned short port,
            (struct sockaddr *)&server_addr,
            sizeof(server_addr)) != 0) {
     close_socket(server_sock);
-    LOG("ERROR: Could not bind to port %u: %s\n",
+    LOG_ERROR("Could not bind to port %u: %s\n",
         port,
         xstrerror(ERROR_SYSTEM, socket_error));
     return;
@@ -201,7 +229,7 @@ static void serve(unsigned short port,
 
   if (listen(server_sock, 32) != 0) {
     close_socket(server_sock);
-    LOG("ERROR: Could not start listening for connections: %s\n",
+    LOG_ERROR("Could not start listening for connections: %s\n",
         xstrerror(ERROR_SYSTEM, socket_error));
     return;
   }
@@ -229,7 +257,7 @@ static void serve(unsigned short port,
 
     result = poll(pollfds, MAX_ACTIVE_CONNECTIONS + 1, 10);
     if (result < 0) {
-      LOG("ERROR: Socket polling failed: %s\n",
+      LOG_ERROR("Failed to poll socket: %s\n",
           xstrerror(ERROR_SYSTEM, socket_error));
       break;
     }
@@ -244,18 +272,18 @@ static void serve(unsigned short port,
                            (struct sockaddr *)&client_addr,
                            &client_addr_len);
       if (client_sock < 0) {
-        LOG("ERROR: Could not accept connection: %s\n",
+        LOG_ERROR("Could not accept connection: %s\n",
             xstrerror(ERROR_SYSTEM, socket_error));
       }
       for (i = 0; i < MAX_ACTIVE_CONNECTIONS; i++) {
         if (pollfds[i].fd == INVALID_SOCKET) {
-          LOG_TRACE("Connection accepted: %d\n", i);
+          LOG_TRACE("[%s] Connection accepted: %d\n", tag, i);
           pollfds[i].fd = (int)client_sock;
           break;
         }
       }
       if (i == MAX_ACTIVE_CONNECTIONS) {
-        LOG("ERROR: Reached connection limit\n");
+        LOG_ERROR("Reached connection count limit\n");
         continue;
       }
     }
@@ -268,7 +296,7 @@ static void serve(unsigned short port,
       if ((pollfds[i].revents & POLLHUP) != 0
             || (pollfds[i].revents & POLLERR) != 0) {
         /* Client disconnected */
-        LOG_TRACE("Disconnected: %d\n", i);
+        LOG_TRACE("[%s] Disconnected: %d\n", tag, i);
         close_socket(pollfds[i].fd);
         pollfds[i].fd = INVALID_SOCKET;
         continue;
@@ -299,7 +327,7 @@ static int process_http_request(socket_t sock)
 
   len = http_recv_headers(sock, buf, sizeof(buf));
   if (len < 0) {
-    LOG("ERROR: Could not receive HTTP request headers: %s\n",
+    LOG_ERROR("Could not receive HTTP request headers: %s\n",
         xstrerror(ERROR_SYSTEM, socket_error));
     return -1;
   }
@@ -311,12 +339,12 @@ static int process_http_request(socket_t sock)
                               &http_method,
                               &request_target,
                               &http_version) == NULL) {
-    LOG("ERROR: Could not parse HTTP request\n");
+    LOG_ERROR("Could not parse HTTP request\n");
     return -1;
   }
 
   if (http_version > 0x01FF) {
-    LOG("ERROR: Unsupported HTTP version %x\n", http_version);
+    LOG_ERROR("Unsupported HTTP version %x\n", http_version);
     http_send_bad_request_error(sock);
     return -1;
   }
@@ -354,6 +382,7 @@ static void listen_http_connections(void *arg)
 
   LOG("Listening for HTTP connections on port %d\n", config_http_port);
   serve(
+    "http",
     config_http_port,
     &http_server_socket,
     &http_server_active,
@@ -432,7 +461,7 @@ static int process_ws_request(socket_t sock)
     int opcode;
     error = ws_recv(sock, &opcode, NULL, NULL, NULL);
     if (error != 0) {
-      LOG("ERROR: Could not receive WebSocket data from client %s: %s\n",
+      LOG_ERROR("Could not receive WebSocket data from client %s: %s\n",
           client->address_str,
           xstrerror(ERROR_SYSTEM, socket_error));
       return -1;
@@ -483,6 +512,7 @@ static void listen_ws_connections(void *arg)
 
   LOG("Listening for WebSocket connections on port %d\n", config_ws_port);
   serve(
+    "ws",
     config_ws_port,
     &ws_server_socket,
     &ws_server_active,
@@ -491,8 +521,9 @@ static void listen_ws_connections(void *arg)
 
 static void send_event(const struct mysql_event_general *event_general)
 {
-  struct strbuf buf;
   bool ignore = false;
+  int error;
+  struct strbuf json;
 
   mutex_lock(&message_queue_mutex);
   {
@@ -503,68 +534,81 @@ static void send_event(const struct mysql_event_general *event_general)
   mutex_unlock(&message_queue_mutex);
 
   if (ignore) {
+    LOG_TRACE("Ignoring event because of message queue overflow");
     return;
   }
 
-  if (strbuf_alloc(&buf, MAX_WS_MESSAGE_LEN) != 0) {
+  error = strbuf_alloc(&json, MAX_WS_MESSAGE_LEN);
+  if (error != 0) {
+    LOG_ERROR("Error allocating message JSON buffer",
+      xstrerror(ERROR_SYSTEM, error));
     return;
   }
 
-  strbuf_append(&buf, "{");
+  strbuf_append(&json, "{");
 
   switch (event_general->event_subclass) {
-    case MYSQL_AUDIT_GENERAL_LOG:
-      json_encode(&buf,
+    case MYSQL_AUDIT_GENERAL_LOG: {
+      const char *query_str =
+        CSTR(event_general->general_query) != NULL
+          ? CSTR(event_general->general_query)
+          : CSTR(event_general->general_command);
+      json_encode(&json,
         "\"type\": %s, ", "query_start");
-      json_encode(&buf,
-        "\"user\": %s, ", event_general->general_user);
-      json_encode(&buf,
-        "\"query\": %s, ", event_general->general_query);
-      json_encode(&buf,
+      json_encode(&json,
+        "\"user\": %s, ", CSTR(event_general->general_user));
+      json_encode(&json,
+        "\"query\": %s, ", query_str);
+      json_encode(&json,
         "\"time\": %L, ", time_ms());
-      json_encode(&buf,
+      json_encode(&json,
         "\"rows\": %L, ", event_general->general_rows);
-#if MYSQL_AUDIT_INTERFACE_VERSION >= 0x0302
-      json_encode(&buf,
+#if TARGET_MARIADB && MYSQL_AUDIT_INTERFACE_VERSION >= 0x0302
+      json_encode(&json,
         "\"query_id\": %L, ", event_general->query_id);
-      json_encode(&buf,
+      json_encode(&json,
         "\"database\": %s", *(const char * const *)&event_general->database);
 #else
-      json_encode(&message,
+      json_encode(&json,
         "\"query_id\": %l", ATOMIC_INCREMENT(&query_id_counter));
 #endif
       break;
+    }
     case MYSQL_AUDIT_GENERAL_ERROR:
-      json_encode(&buf,
+      json_encode(&json,
         "\"type\": %s, ", "query_error");
-      json_encode(&buf,
+#if defined MariaDB_PLUGIN_MATURITY_STABLE && MYSQL_AUDIT_INTERFACE_VERSION >= 0x0302
+      json_encode(&json,
         "\"query_id\": %L, ", event_general->query_id);
-      json_encode(&buf,
+#endif
+      json_encode(&json,
         "\"time\": %L, ", time_ms());
-      json_encode(&buf,
+      json_encode(&json,
         "\"error_code\": %i, ", event_general->general_error_code);
-      json_encode(&buf,
-        "\"error_message\": %s", event_general->general_command);
+      json_encode(&json,
+        "\"error_message\": %s", CSTR(event_general->general_command));
       break;
     case MYSQL_AUDIT_GENERAL_RESULT:
-      json_encode(&buf,
+      json_encode(&json,
         "\"type\": %s, ", "query_result");
-      json_encode(&buf,
+#if TARGET_MARIADB && MYSQL_AUDIT_INTERFACE_VERSION >= 0x0302
+      json_encode(&json,
         "\"query_id\": %L, ", event_general->query_id);
-      json_encode(&buf,
+#endif
+      json_encode(&json,
         "\"time\": %L, ", time_ms());
-      json_encode(&buf,
+      json_encode(&json,
         "\"rows\": %L", event_general->general_rows);
       break;
   }
 
-  strbuf_append(&buf, "}");
+  strbuf_append(&json, "}");
 
   mutex_lock(&message_queue_mutex);
   {
-    struct ws_message *message = malloc(sizeof(*message));
+    struct ws_message *message = (struct ws_message *)malloc(sizeof(*message));
     if (message != NULL) {
-      message->message = buf;
+      message->message = json;
       message->next = NULL;
       if (message_queue_tail != NULL) {
         message_queue_tail->next = message;
@@ -575,8 +619,8 @@ static void send_event(const struct mysql_event_general *event_general)
       }
       pending_message_count++;
     } else {
-      LOG("Error: Failed to allocate memory for message: %s\n",
-          xstrerror(ERROR_SYSTEM, errno));
+      LOG_ERROR("Error allocating message: %s\n",
+        xstrerror(ERROR_SYSTEM, errno));
     }
   }
   mutex_unlock(&message_queue_mutex);
@@ -623,7 +667,7 @@ static void process_pending_messages(void *arg)
                                 WS_FLAG_FINAL,
                                 0);
           if (result <= 0) {
-            LOG("Error: Failed to send message to %s: %s\n",
+            LOG_ERROR("Failed to send message to %s: %s\n",
                 client->address_str,
                 xstrerror(ERROR_SYSTEM, socket_error));
             free_ws_client(client);
@@ -747,9 +791,15 @@ static int logger_plugin_deinit(void *arg)
   return 0;
 }
 
-static void logger_notify(MYSQL_THD thd,
-                          unsigned int event_class,
-                          const void *event)
+static
+#if MYSQL_AUDIT_INTERFACE_VERSION >= 0x0400
+int
+#else
+void
+#endif
+logger_notify(MYSQL_THD thd,
+              mysql_event_class_t event_class,
+              const void *event)
 {
   if (event_class == MYSQL_AUDIT_GENERAL_CLASS) {
     const struct mysql_event_general *
@@ -758,19 +808,27 @@ static void logger_notify(MYSQL_THD thd,
     switch (event_subclass) {
       case MYSQL_AUDIT_GENERAL_LOG:
       case MYSQL_AUDIT_GENERAL_ERROR:
-      case MYSQL_AUDIT_GENERAL_RESULT: {
+      case MYSQL_AUDIT_GENERAL_RESULT:
         send_event(event_general);
         break;
-      }
     }
   }
+#if MYSQL_AUDIT_INTERFACE_VERSION >= 0x0400
+  return 0;
+#endif
 }
 
 static struct st_mysql_audit logger_descriptor = {
   MYSQL_AUDIT_INTERFACE_VERSION,
   NULL,
   logger_notify,
-  {MYSQL_AUDIT_GENERAL_CLASSMASK | MYSQL_AUDIT_TABLE_CLASSMASK}
+  {
+#if TARGET_MARIADB
+    MYSQL_AUDIT_GENERAL_CLASSMASK
+#else
+    MYSQL_AUDIT_GENERAL_ALL
+#endif
+  }
 };
 
 static MYSQL_SYSVAR_INT(http_port, config_http_port,
@@ -785,46 +843,63 @@ static MYSQL_SYSVAR_BOOL(trace, config_trace,
   PLUGIN_VAR_RQCMDARG, "Enable verbose logging",
   NULL, NULL, false);
 
+#if MYSQL_AUDIT_INTERFACE_VERSION >= 0x0400
+static struct SYS_VAR *logger_sys_vars[] = {
+#else
 static struct st_mysql_sys_var *logger_sys_vars[] = {
+#endif
   MYSQL_SYSVAR(http_port),
   MYSQL_SYSVAR(ws_port),
   MYSQL_SYSVAR(trace),
   NULL
 };
 
-#ifndef maria_declare_plugin
-    #define maria_declare_plugin mysql_declare_plugin
-#endif
-#ifndef MariaDB_PLUGIN_MATURITY_GAMMA
-    #define MariaDB_PLUGIN_MATURITY_GAMMA 0
-#endif
+#define NAME "LOGGER"
+#define AUTHOR "Sergey Zolotarev"
+#define DESCRIPTION "Nice query logger"
 
-#undef _
-#define _(x) x
-
-#define LOGGER_PLUGIN_DECLARATIONS \
-  _(MYSQL_AUDIT_PLUGIN), \
-  _(&logger_descriptor), \
-  _("LOGGER"), \
-  _("Sergey Zolotarev"), \
-  _("Nice query logger"), \
-  _(PLUGIN_LICENSE_PROPRIETARY), \
-  _(logger_plugin_init), \
-  _(logger_plugin_deinit), \
-  _(0x0100), \
-  _(NULL), \
-  _(logger_sys_vars)
-
-mysql_declare_plugin(logger) {
-  LOGGER_PLUGIN_DECLARATIONS,
-  NULL,
-  0
-}
-mysql_declare_plugin_end;
+#if TARGET_MARIADB
 
 maria_declare_plugin(logger) {
-  LOGGER_PLUGIN_DECLARATIONS,
+  MYSQL_AUDIT_PLUGIN,
+  &logger_descriptor,
+  NAME,
+  AUTHOR,
+  DESCRIPTION,
+  PLUGIN_LICENSE_PROPRIETARY,
+  logger_plugin_init,
+#if MYSQL_AUDIT_INTERFACE_VERSION >= 0x0400
+  NULL,
+#endif
+  logger_plugin_deinit,
+  0x0100,
+  NULL,
+  logger_sys_vars,
   "1.0",
   MariaDB_PLUGIN_MATURITY_GAMMA
 }
 maria_declare_plugin_end;
+
+#else /* TARGET_MARIADB */
+
+mysql_declare_plugin(logger) {
+  MYSQL_AUDIT_PLUGIN,
+    &logger_descriptor,
+    NAME,
+    AUTHOR,
+    DESCRIPTION,
+    PLUGIN_LICENSE_PROPRIETARY,
+    logger_plugin_init,
+#if MYSQL_AUDIT_INTERFACE_VERSION >= 0x0400
+    NULL,
+#endif
+    logger_plugin_deinit,
+    0x0100,
+    NULL,
+    logger_sys_vars,
+    NULL,
+    0
+}
+mysql_declare_plugin_end;
+
+#endif /* !TARGET_MARIADB */

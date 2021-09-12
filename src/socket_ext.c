@@ -202,7 +202,7 @@ int send_n(socket_t sock, const char *buf, int size, int flags)
   return len;
 }
 
-int send_string(socket_t sock, char *s)
+int send_string(socket_t sock, const char *s)
 {
   size_t len = strlen(s);
 

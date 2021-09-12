@@ -27,9 +27,15 @@
 #ifdef _WIN32
   #include <winsock2.h>
   #include <ws2tcpip.h>
-  #define SHUT_RD SD_RECEIVE
-  #define SHUT_WR SD_SEND
-  #define SHUT_RDWR SD_BOTH
+  #ifndef SHUT_RD
+    #define SHUT_RD SD_RECEIVE
+  #endif
+  #ifndef SHUT_WR
+    #define SHUT_WR SD_SEND
+  #endif
+  #ifndef SHUT_RDWR
+    #define SHUT_RDWR SD_BOTH
+  #endif
   #define close_socket closesocket
   #define ioctl_socket ioctlsocket
   #define poll WSAPoll
@@ -53,7 +59,9 @@
   typedef struct pollfd pollfd_t;
 #endif
 
+#undef socket_error
 #define socket_error get_socket_error()
+#undef socket_errno
 #define socket_errno get_socket_errno()
 
 typedef int (*recv_handler_t)(
@@ -65,7 +73,7 @@ int get_socket_errno(void);
 int recv_n(
   socket_t sock, char *buf, int size, int flags, recv_handler_t handler);
 int send_n(socket_t sock, const char *buf, int size, int flags);
-int send_string(socket_t sock, char *s);
+int send_string(socket_t sock, const char *s);
 
 int close_socket_nicely(socket_t sock);
 

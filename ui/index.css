@@ -80,7 +80,7 @@ body {
 
 .table td {
   color: black;
-  background: #f5fadb;
+  background: #F0F7FF;
   padding: 10px;
   box-shadow: -1px 0 #cee0f2;
   border-top: 1px solid transparent;
@@ -92,12 +92,14 @@ body {
   text-overflow: ellipsis;
 }
 
-.table tr.success td {
-  background: #F0F7FF;
+.table tr {
+  position: relative;
 }
+
 .table tr.error td {
   background: #f7cdcd;
 }
+
 .table tr.selected td {
   background: #A2D1F7;
   box-shadow: -1px 0 #4496D8;

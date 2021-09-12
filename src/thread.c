@@ -68,7 +68,7 @@ int thread_create(thread_t *handle,
 {
   struct thread_data *thread_data;
 
-  thread_data = malloc(sizeof(*thread_data));
+  thread_data = (struct thread_data *)malloc(sizeof(*thread_data));
   if (thread_data == NULL) {
     return errno;
   }

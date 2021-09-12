@@ -81,7 +81,8 @@ static void on_handshake_header(
   const struct http_fragment *value,
   void *data)
 {
-  struct ws_http_handshake_state *state = data;
+  struct ws_http_handshake_state *state = (struct ws_http_handshake_state *)
+    data;
 
   if (strncasecmp(name->ptr, "Connection", name->length) == 0) {
     if (strncasecmp(value->ptr, "Upgrade", value->length) == 0) {
@@ -167,7 +168,7 @@ static int ws_send_handshake_accept(socket_t sock, const char *key)
   char response[256];
 
   key_len = strlen(key);
-  key_hash_input = malloc(sizeof(*key_hash_input)
+  key_hash_input = (char *)malloc(sizeof(*key_hash_input)
      * (key_len + sizeof(ws_key_accept_magic)));
   if (key_hash_input == NULL) {
     return WS_ERROR_MEMORY;
@@ -269,7 +270,7 @@ static uint8_t *ws_alloc_frame(
     + payload_ext_len_size
     + ((flags & WS_FLAG_MASK) != 0 ? sizeof(masking_key) : 0)
     + payload_len;
-  data = malloc(frame_size);
+  data = (uint8_t *)malloc(frame_size);
   if (data == NULL) {
     return NULL;
   }
@@ -358,7 +359,7 @@ int ws_recv(
   assert(out_opcode != NULL);
   assert(data == NULL || len != NULL);
 
-  error = recv_n(sock, (void *)&header, sizeof(header), 0, NULL);
+  error = recv_n(sock, (char *)&header, sizeof(header), 0, NULL);
   if (error <= 0) {
     return error;
   }
@@ -376,14 +377,14 @@ int ws_recv(
 
   if (payload_len == PAYLOAD_LENGTH_16) {
     uint16_t len;
-    error = recv_n(sock, (void *)&len, sizeof(len), 0, NULL);
+    error = recv_n(sock, (char *)&len, sizeof(len), 0, NULL);
     if (error <= 0) {
       return error;
     }
     payload_len = ntohs(len);
   } else if (payload_len == PAYLOAD_LENGTH_64) {
     uint64_t len;
-    error = recv_n(sock, (void *)&len, sizeof(len), 0, NULL);
+    error = recv_n(sock, (char *)&len, sizeof(len), 0, NULL);
     if (error <= 0) {
       return error;
     }
@@ -399,7 +400,7 @@ int ws_recv(
 
   if (data != NULL) {
     if (payload_len > 0) {
-      payload = malloc(payload_len);
+      payload = (char *)malloc(payload_len);
       if (payload == NULL) {
         return errno;
       }

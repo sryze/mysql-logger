@@ -94,7 +94,7 @@ int read_config(const char *str, config_callback_t callback, void *arg)
       value_len++;
     }
 
-    name = malloc(name_len + 1);
+    name = (char *)malloc(name_len + 1);
     if (name == NULL) {
       return errno;
     }
@@ -102,7 +102,7 @@ int read_config(const char *str, config_callback_t callback, void *arg)
     memcpy(name, str + name_pos, name_len);
     name[name_len] = '\0';
 
-    value = malloc(value_len + 1);
+    value = (char *)malloc(value_len + 1);
     if (value == NULL) {
       free(name);
       return errno;
@@ -150,7 +150,7 @@ int read_config_file(const char *path, config_callback_t callback, void *arg)
     return 0;
   }
 
-  buf = malloc(len + 1);
+  buf = (char *)malloc(len + 1);
   if (buf == NULL) {
     fclose(file);
     return errno;

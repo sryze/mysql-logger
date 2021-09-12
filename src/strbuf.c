@@ -33,7 +33,7 @@ int strbuf_alloc(struct strbuf *sb, size_t count)
 {
   char *str;
 
-  str = malloc(count * sizeof(char));
+  str = (char *)malloc(count * sizeof(char));
   if (str == NULL) {
     sb->str = NULL;
     sb->length = 0;
@@ -63,7 +63,7 @@ static int strbuf_realloc(struct strbuf *sb, size_t new_len)
     count *= STRBUF_SIZE_MULTIPLIER;
   }
 
-  str = realloc(sb->str, count * sizeof(char));
+  str = (char *)realloc(sb->str, count * sizeof(char));
   if (str == NULL) {
     return ENOMEM;
   }

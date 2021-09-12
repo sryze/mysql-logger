@@ -183,7 +183,7 @@ function onQueryStart(event, options) {
 }
 
 function onQueryEnd(event) {
-  if (event.query_id == 0) {
+  if (!event.query_id) {
     return;
   }
 
