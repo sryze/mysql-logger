@@ -42,14 +42,9 @@
 #endif
 
 #ifndef __cplusplus
-  #if defined __STDC__ && defined __STDC_VERSION__ && __STDC_VERSION__ >= 199901L
-    #include <stdbool.h>
-  #else
-    typedef unsigned char bool;
-    #define true 1
-    #define false 0
-    #define __bool_true_false_are_defined
-  #endif
+  typedef char bool;
+  #define true  1
+  #define false 0
 #endif
 
 #if defined _MSC_VER
