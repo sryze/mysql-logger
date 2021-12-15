@@ -80,7 +80,7 @@ body {
 
 .table td {
   color: black;
-  background: #F0F7FF;
+  background: #faf7e6;
   padding: 10px;
   box-shadow: -1px 0 #cee0f2;
   border-top: 1px solid transparent;
@@ -96,6 +96,9 @@ body {
   position: relative;
 }
 
+.table tr.success td {
+  background: #f0f7ff;
+}
 .table tr.error td {
   background: #f7cdcd;
 }
