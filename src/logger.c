@@ -55,7 +55,9 @@
   #define TARGET_MARIADB 0
 #endif
 
-#define MYSQL_PORT 3306
+#ifndef MYSQL_PORT
+  #define MYSQL_PORT 3306
+#endif
 #define MYSQL_LOGGER_PORT (MYSQL_PORT + 10000)
 #define MAX_HTTP_HEADERS (8 * 1024) /* HTTP RFC recommends at least 8000 */
 #define MAX_ACTIVE_CONNECTIONS 256
