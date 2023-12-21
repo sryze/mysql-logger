@@ -10,7 +10,7 @@ echo "install: Stopping MySQL server"
 service mysql stop || exit 1
 
 echo "install: Copying plugin to $plugin_dir"
-cp logger.so $plugin_dir/ && chmod ag+r $plugin_dir/logger.so || exit 1
+cp logger.so "$plugin_dir"/ && chmod ag+r "$plugin_dir"/logger.so || exit 1
 
 echo "install: Starting MySQL server"
 service mysql start || exit 1

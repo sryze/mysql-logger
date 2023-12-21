@@ -13,7 +13,7 @@ echo "uninstall: Stopping MySQL server"
 service mysql stop || exit 1
 
 echo "uninstall: Removing plugin from $plugin_dir"
-rm $plugin_dir/logger.so || exit 1
+rm "$plugin_dir/logger.so" || exit 1
 
 echo "uninstall: Starting MySQL server"
 service mysql start || exit 1

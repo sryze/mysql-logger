@@ -1,10 +1,10 @@
 #!/bin/sh
 
-DIR=$(realpath $(dirname $0))
-. $DIR/include/data-dir.sh
-. $DIR/include/mysqld.sh
+DIR=$(realpath "$(dirname "$0")")
+. "$DIR/include/data-dir.sh"
+. "$DIR/include/mysqld.sh"
 
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
   case "$1" in
     --logger-lib)
       shift
@@ -21,12 +21,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$logger_lib" ]]; then
+if [ -z "$logger_lib" ]; then
   plugin_dir=$PWD
-  plugin_name=logger
+  plugin_name="logger"
 else
-  plugin_dir=$(realpath $(dirname "$logger_lib"))
-  plugin_name=$(basename $logger_lib)
+  plugin_dir=$(realpath "$(dirname "$logger_lib")")
+  plugin_name=$(basename "$logger_lib")
 fi
 
 lldb "$MYSQLD" -- \

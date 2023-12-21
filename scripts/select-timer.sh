@@ -1,8 +1,8 @@
 #!/bin/sh
 
-DIR=$(realpath $(dirname $0))
+DIR=$(realpath "$(dirname "$0")")
 
 while true; do
-  $DIR/select.sh
+  "$DIR/select.sh"
   sleep 1
 done
